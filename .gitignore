@@ -12,5 +12,5 @@
 /mods/**/*
 !/mods/**/*.dll
 
-/src/
+!/src/
 /src/*
