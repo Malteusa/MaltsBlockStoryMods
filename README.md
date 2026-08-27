@@ -75,6 +75,8 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 * **Knockback Tweaks**: Adds a Keybind menu that with a slider to multiply the knockback everything takes. Made just for fun.
   > Configurable using a Keybind menu *(Default: `.` Period)*
 ---
+* **Hide Diamonds**: Adds a Keybind that simply hides the Diamonds display at the top of the screen.
+  > Uses a Keybind *(Default: `O`)*
 ---
 
 ## License
