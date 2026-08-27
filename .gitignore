@@ -10,7 +10,6 @@ publish/
 !/.gitignore
 !/README.md
 !/LICENSE
-!/INSTALL.txt
 !/mods/
 /mods/*
 !/mods/*.dll
