@@ -44,8 +44,6 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Works on equipable vehicles like the Jetpack and Diving suit.
   * Any hidden mount will automatically become visible again once dismounted.
 ---
-* **Tool Stacking**: A mod that makes all tools, weapons and armor automatically stack and combine durability when picked up and manually in your inventory. Also makes Fuel finally stack in your inventory.
----
 * **Instant Anvil**: Fully configurable tweaks to the Block Story anvil, ranging from porting Minecraft's durability merging feature to Instant Anvils and Hammer Repairing.
   > All features can be toggled using the in-game mods list config.
   * Durability merging feature: combine 2 of the same tool/armor to transfer durability.
@@ -57,12 +55,14 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 ---
 * **Unlimited Pets**: A simple mod that removes the 5-pet summon limit.
 ---
+* **Tool Stacking**: A mod that makes all tools, weapons and armor automatically stack and combine durability when picked up and manually in your inventory. Also makes Fuel finally stack in your inventory.
+---
 * **Instant Soul Catch**: Made solely because suicidal Stormbringers were pissing me off.
   > Configurable using a Keybind menu *(Default: `I`)*
   * Make Soul Catching instant.
   * Remove the mana cost for Soul Catching.
 ---
-* **Max Loot**: Makes you comprehensively lucky. Modifies the loot from Safeboxes and Mobs.
+* **Max Loot**: Makes you comprehensively lucky. Modifies the loot from Safeboxes, Mobs and Blocks.
   > Configurable using a Keybind menu *(Default: `\` Backslash)*
   * Force all naturally generated Safeboxes to have all 16 slots filled with loot.
   * Make all mobs drop all of their loot 100% of the time,
@@ -70,8 +70,8 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Make mobs drop their loot without player/pet damage, just like the old days.
   * Make all blocks and mobs drop coins and diamonds on death/breaking.
 ---
-* **No Save on Diamond Change**: A simple mod recommended for use with Max Loot. Block Story forces an auto-save every time you gain or spend a diamond; this mod simply disables that forced save.
+* **No Save on Diamond Change**: A simple mod recommended for use with Max Loot if diamond drops on every mob kill and block breaking is enabled. Block Story forces an auto-save every time you gain or spend a diamond; this mod simply disables that forced save.
 ---
-* **Knockback Tweaks**: Adds a Keybind menu that adds a slider to multiply the knockback everything takes. Made just for fun.
+* **Knockback Tweaks**: Adds a Keybind menu that with a slider to multiply the knockback everything takes. Made just for fun.
   > Configurable using a Keybind menu *(Default: `.` Period)*
 ---
