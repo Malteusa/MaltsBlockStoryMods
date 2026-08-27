@@ -6,7 +6,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 
 ## Installation
 
-> ⚠️ You **must** install [BlockStoryModKit](https://github.com/1MR1C1/BlockStoryModKit) first!
+> You **must** install [BlockStoryModKit](https://github.com/1MR1C1/BlockStoryModKit) first!
 
 1. Download your desired `.dll` file.
 2. Drag and drop the `.dll` file into your BepInEx plugins directory:  
