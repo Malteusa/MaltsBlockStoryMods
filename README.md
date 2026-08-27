@@ -6,7 +6,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 
 ## Installation
 
-> ⚠️ You **must** install [BlockStoryModKit](https://github.com/1MR1C1/BlockStoryModKit) before using these mods.
+> ⚠️ You **must** install [BlockStoryModKit](https://github.com/1MR1C1/BlockStoryModKit) first!
 
 1. Download your desired `.dll` file.
 2. Drag and drop the `.dll` file into your BepInEx plugins directory:  
@@ -18,7 +18,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 ## Modlist
 
 * **Fishing Made Easy**: The first mod that led me into modding Block Story. Fishing kinda sucks, so this mod adds some tweaks to make it not suck.
-  > Configurable using a Keybind menu *(Default: `]` Right Bracket)*
+  > Configurable using a Keybind menu *(Default: `[` Left Bracket)*
   * Automatically catch fish when they bite.
   * Disable the 50% chance for you to fail catching a fish.
   * Enable secondary fishing loot, even on a failed catch.
@@ -44,6 +44,8 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Works on equipable vehicles like the Jetpack and Diving suit.
   * Any hidden mount will automatically become visible again once dismounted.
 ---
+* **Tool Stacking**: A mod that makes all tools, weapons and armor automatically stack and combine durability when picked up and manually in your inventory. Also makes Fuel finally stack in your inventory.
+---
 * **Instant Anvil**: Fully configurable tweaks to the Block Story anvil, ranging from porting Minecraft's durability merging feature to Instant Anvils and Hammer Repairing.
   > All features can be toggled using the in-game mods list config.
   * Durability merging feature: combine 2 of the same tool/armor to transfer durability.
@@ -61,13 +63,15 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Remove the mana cost for Soul Catching.
 ---
 * **Max Loot**: Makes you comprehensively lucky. Modifies the loot from Safeboxes and Mobs.
-  > Configurable using a Keybind menu *(Default: `'` Single Quote)*
+  > Configurable using a Keybind menu *(Default: `\` Backslash)*
   * Force all naturally generated Safeboxes to have all 16 slots filled with loot.
-  * Make all mobs drop all of their loot 100% of the time, ignoring level requirements and player-kill restrictions just like the old days.
-  * Make all blocks and mobs drop coins and diamonds on death/breaking. *(Currently cannot be toggled due to code shenanigans)*.
+  * Make all mobs drop all of their loot 100% of the time,
+  * Make special loot ignore their mob level requirement.
+  * Make mobs drop their loot without player/pet damage, just like the old days.
+  * Make all blocks and mobs drop coins and diamonds on death/breaking.
 ---
 * **No Save on Diamond Change**: A simple mod recommended for use with Max Loot. Block Story forces an auto-save every time you gain or spend a diamond; this mod simply disables that forced save.
 ---
-* **Knockback Tweaks**: Adds a Keybind menu that allows you to multiply the knockback everything takes. Made just for fun.
-  > Configurable using a Keybind menu *(Default: `[` Left Bracket)*
+* **Knockback Tweaks**: Adds a Keybind menu that adds a slider to multiply the knockback everything takes. Made just for fun.
+  > Configurable using a Keybind menu *(Default: `.` Period)*
 ---
