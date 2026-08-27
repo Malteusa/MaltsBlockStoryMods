@@ -75,3 +75,21 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 * **Knockback Tweaks**: Adds a Keybind menu that with a slider to multiply the knockback everything takes. Made just for fun.
   > Configurable using a Keybind menu *(Default: `.` Period)*
 ---
+---
+
+## License
+
+This project is licensed under a custom permissive modding license, see the full [LICENSE](https://github.com/Malteusa/MaltsBlockStoryMods/blob/main/LICENSE) file for details.
+
+### What you CAN do:
+* **Download & Play:** Free to use for personal gameplay.
+* **Inspect & Learn:** You are free to decompile, disassemble, and reverse engineer the code.
+* **Modify & Fork:** You are welcome to adapt, modify, and create derivative works, provided public releases remain non-commercial and include full source code.
+
+###  What you CANNOT do:
+* **Sell or Monetize:** You may not sell, rent, or commercially exploit these mods or any derivative works.
+* **Rebrand or Claim Ownership:** You may not remove copyright notices or present the original work as your own.
+* **Use Outside Block Story:** All mods and derived code must be used strictly for modding Block Story.
+---
+### Disclaimer
+This is an independent, unofficial set of mods and is not affiliated with, authorized, or endorsed by **Big Cube Interactive LLC** or the makers of **Block Story**. Block Story is a registered trademark of Big Cube Interactive LLC.
