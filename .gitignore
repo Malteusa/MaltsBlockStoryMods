@@ -1,13 +1,16 @@
-# build output
 bin/
 obj/
 publish/
-
-# editor / IDE
 .vs/
 .idea/
 *.user
 *.suo
-
-# misc
 *.dxvk-cache
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/INSTALL.txt
+!/mods/
+/mods/*
+!/mods/*.dll
