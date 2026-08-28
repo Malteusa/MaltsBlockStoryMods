@@ -69,7 +69,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Make Soul Catching instant.
   * Remove the mana cost for Soul Catching.
 ---
-* **Max Loot**: Makes you comprehensively lucky. Modifies the loot from Safeboxes, Mobs and Blocks.
+* **Max Loot**: Makes you incomprehensibly lucky. Modifies the loot from Safeboxes, Mobs and Blocks.
   > Configurable using a Keybind menu *(Default: `\` Backslash)*
   * Force all naturally generated Safeboxes to have all 16 slots filled with loot.
   * Make all mobs drop all of their loot 100% of the time,
