@@ -59,7 +59,10 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 ---
 * **Unlimited Pets**: A simple mod that removes the 5-pet summon limit.
 ---
-* **Tool Stacking**: A mod that makes all tools, weapons and armor automatically stack and combine durability when picked up and manually in your inventory. Also makes Fuel finally stack in your inventory.
+* **Tool Stacking**: A mod that makes all tools, weapons and armor automatically "stack" and combine durability when picked up and manually in your inventory. Also makes Fuel finally stack in your inventory. Essentially the same way equipable armors can "stack" in vanilla.
+  > Configurable using a Keybind menu *(Default: `,` Comma)*
+  * Make all tools, weapons and armor "stack" on pickup.
+  * Allows merging of tools, weapons and armor in the inventory by dragging them into the same item to merge durability.
 ---
 * **Instant Soul Catch**: Made solely because suicidal Stormbringers were pissing me off.
   > Configurable using a Keybind menu *(Default: `I`)*
