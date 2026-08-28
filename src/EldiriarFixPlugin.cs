@@ -24,7 +24,7 @@ namespace BlockStoryMod
         public static bool EnhancedRange = PlayerPrefs.GetInt("EldiriarFix_EnhancedRange", 1) != 0;
         public static bool CleanGhostProjectiles = PlayerPrefs.GetInt("EldiriarFix_CleanGhostProjectiles", 1) != 0;
         public static bool FilterNeutralTargets = PlayerPrefs.GetInt("EldiriarFix_FilterNeutralTargets", 1) != 0;
-        public static bool AlternateProjectiles = PlayerPrefs.GetInt("EldiriarFix_AlternateProjectiles", PlayerPrefs.GetInt("EldiriarFix_AlternateMeteors", 1)) != 0;
+        public static bool AlternateProjectiles = PlayerPrefs.GetInt("EldiriarFix_AlternateProjectiles", 1) != 0;
 
         private ISRef _key;
 
