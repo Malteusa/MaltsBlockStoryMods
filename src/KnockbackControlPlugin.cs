@@ -7,22 +7,36 @@ using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod 
 {
-    [BepInPlugin("com.malts.blockstory.knockbacktweaks", "KnockbackTweaks", "2.0.0")] 
+    [BepInPlugin("com.malts.blockstory.knockbacktweaks", "KnockbackTweaks", "2.2.0")] 
     [BepInDependency(Core.Guid)] 
     public class KnockbackTweaksPlugin : BaseUnityPlugin 
     { 
         public static bool Enabled = PlayerPrefs.GetInt("KB_Enabled", 1) != 0; 
-        public static int KnockbackMultiplier = PlayerPrefs.GetInt("KB_Multiplier", 1);
+        public static bool SavePersistent = PlayerPrefs.GetInt("KB_SavePersistent", 0) != 0; 
+        public static int KnockbackMultiplier = SavePersistent ? PlayerPrefs.GetInt("KB_Multiplier", 1) : 1;
 
         private ISRef _key;
         private bool _open;
         private bool _wasOpen;
-        private Rect _win = new Rect(60, 60, 400, 220);
+        private Rect _win = new Rect(60, 60, 360, 230);
         private Harmony _harmony;
+
+        private static GUIStyle _hdr;
+        private static GUIStyle _row;
+        private static GUIStyle _back;
+        private static bool _styles;
+        private static int _builtVer;
 
         private void Awake()
         {
             _key = BSKeybinds.Register("KnockbackTweaks", "Open Knockback Menu", "<Keyboard>/period");
+
+            if (!SavePersistent)
+            {
+                KnockbackMultiplier = 1;
+                PlayerPrefs.SetInt("KB_Multiplier", 1);
+                PlayerPrefs.Save();
+            }
 
             ModRegistry.Register(new ModInfo
             {
@@ -50,6 +64,15 @@ namespace BlockStoryMod
             _harmony?.UnpatchSelf();
         }
 
+        private void OnApplicationQuit()
+        {
+            if (!SavePersistent)
+            {
+                PlayerPrefs.SetInt("KB_Multiplier", 1);
+                PlayerPrefs.Save();
+            }
+        }
+
         private void Update()
         {
             if (Enabled && BSKeybinds.Pressed(_key))
@@ -65,35 +88,117 @@ namespace BlockStoryMod
             }
         }
 
+        private static void BuildStyles()
+        {
+            Theme.Build();
+            if (_styles && _builtVer == Theme.Version)
+            {
+                return;
+            }
+
+            _hdr = new GUIStyle(Theme.LabelGold)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = Color.white }
+            };
+            _row = new GUIStyle(Theme.Button)
+            {
+                fontSize = 13,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white },
+                padding = new RectOffset(2, 2, 2, 2),
+                margin = new RectOffset(2, 2, 2, 2)
+            };
+            _back = new GUIStyle(Theme.Button)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white },
+                padding = new RectOffset(4, 4, 4, 4),
+                margin = new RectOffset(2, 2, 2, 2)
+            };
+
+            _styles = true;
+            _builtVer = Theme.Version;
+        }
+
         private void OnGUI()
         {
             if (!Enabled || !_open) return;
-            Theme.Build();
+
+            BuildStyles();
             _win = GUILayout.Window(GetInstanceID(), _win, DrawWindow, "Knockback Control", Theme.Window);
         }
 
         private void DrawWindow(int id)
         {
-            GUILayout.Label("Knockback Multiplier", Theme.Label);
-            GUILayout.Label($"{KnockbackMultiplier}x", Theme.Label);
+            GUILayout.Label("Knockback Settings:", _hdr);
+            GUILayout.Space(4);
+
+            GUILayout.Label($"Knockback Multiplier: {KnockbackMultiplier}x", _hdr);
+            GUILayout.Space(2);
 
             int newMultiplier = (int)GUILayout.HorizontalSlider(KnockbackMultiplier, 1f, 1000f);
             if (newMultiplier != KnockbackMultiplier)
             {
                 KnockbackMultiplier = newMultiplier;
-                PlayerPrefs.SetInt("KB_Multiplier", KnockbackMultiplier);
+                if (SavePersistent)
+                {
+                    PlayerPrefs.SetInt("KB_Multiplier", KnockbackMultiplier);
+                    PlayerPrefs.Save();
+                }
+            }
+
+            GUILayout.Space(10);
+
+            if (DrawToggleButton("Persistent Knockback Value", SavePersistent))
+            {
+                SavePersistent = !SavePersistent;
+                PlayerPrefs.SetInt("KB_SavePersistent", SavePersistent ? 1 : 0);
+                if (SavePersistent)
+                {
+                    PlayerPrefs.SetInt("KB_Multiplier", KnockbackMultiplier);
+                }
+                else
+                {
+                    PlayerPrefs.SetInt("KB_Multiplier", 1);
+                }
                 PlayerPrefs.Save();
             }
 
-            GUILayout.Space(15);
+            GUILayout.Space(12);
 
-            if (GUILayout.Button("Close", Theme.Button))
+            if (GUILayout.Button("Close", _back, GUILayout.Height(28f)))
             {
                 _open = false;
             }
 
-            GUILayout.Space(5);
+            GUILayout.Space(2);
             GUI.DragWindow(new Rect(0, 0, 100000, 26));
+        }
+
+        private static bool DrawToggleButton(string label, bool state, bool enabled = true)
+        {
+            bool prevEnabled = GUI.enabled;
+            GUI.enabled = enabled;
+
+            Color prevBg = GUI.backgroundColor;
+            if (enabled)
+            {
+                GUI.backgroundColor = state ? new Color(0.18f, 0.65f, 0.22f, 1f) : new Color(0.72f, 0.2f, 0.2f, 1f);
+            }
+
+            string symbol = state ? "● " : "○ ";
+            bool clicked = GUILayout.Button(symbol + label, _row, GUILayout.Height(28f));
+
+            GUI.backgroundColor = prevBg;
+            GUI.enabled = prevEnabled;
+
+            return clicked;
         }
     }
 
