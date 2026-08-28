@@ -39,7 +39,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Transform Eldriar into a ranged pet (just like the Mech or Snowman).
   * Make Fireballs and Meteors home in on targets.
   * Make Fireballs and Meteors faster.
-  * Protect friendly NPCs from Fireballs/Meteors *(except the ones in his idle animation...)*.
+  * Protect friendly NPCs from Fireballs/Meteors *(~except the ones in his idle animation...~ Well, sometimes...)*.
   * Projectiles are automatically cleaned up once the enemy dies.
 ---
 * **Mount Visibility**: Adds a Keybind to hide whatever mount, pet, or vehicle you are riding or have equipped.
