@@ -1,13 +1,12 @@
 using BepInEx;
 using UnityEngine;
-using System.Reflection;
 using System.Collections.Generic;
 using BlockStoryCore;
 using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.mountvisibility", "MountVisibility", "2.0.0")]
+    [BepInPlugin("com.malts.blockstory.mountvisibility", "MountVisibility", "3.0.0")]
     [BepInDependency(Core.Guid)] 
     public class MountVisibilityPlugin : BaseUnityPlugin
     {
@@ -15,7 +14,17 @@ namespace BlockStoryMod
         private ISRef _key;
         private bool _isMountHidden;
 
+        private GameObject _lastMounted;
+        private bool _wasSuitActive;
+
         private readonly HashSet<GameObject> _hiddenObjects = new HashSet<GameObject>();
+        private readonly HashSet<Behaviour> _hiddenUIWidgets = new HashSet<Behaviour>();
+
+        private readonly HashSet<GameObject> _currentTargets = new HashSet<GameObject>();
+        private readonly HashSet<Behaviour> _currentUIWidgets = new HashSet<Behaviour>();
+
+        private readonly List<GameObject> _toRemoveObjects = new List<GameObject>();
+        private readonly List<Behaviour> _toRemoveWidgets = new List<Behaviour>();
 
         private void Awake()
         {
@@ -44,6 +53,20 @@ namespace BlockStoryMod
         {
             if (!Enabled) return;
 
+            GameObject currentMount = PlayerMounted.mounted;
+            if (currentMount != _lastMounted)
+            {
+                _isMountHidden = false;
+                _lastMounted = currentMount;
+            }
+
+            bool isSuitActive = IsAnySuitActive();
+            if (!isSuitActive && _wasSuitActive)
+            {
+                _isMountHidden = false;
+            }
+            _wasSuitActive = isSuitActive;
+
             if (BSKeybinds.Pressed(_key))
             {
                 ToggleVisibility();
@@ -60,96 +83,187 @@ namespace BlockStoryMod
 
         private void UpdateVisibility()
         {
-            HashSet<GameObject> currentTargets = new HashSet<GameObject>();
+            _currentTargets.Clear();
+            _currentUIWidgets.Clear();
 
             if (_isMountHidden)
             {
                 if (PlayerMounted.mounted != null)
                 {
-                    currentTargets.Add(PlayerMounted.mounted);
-                }
+                    GameObject mount = PlayerMounted.mounted;
+                    _currentTargets.Add(mount);
 
-                MonoBehaviour[] activeScripts = Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None);
-                foreach (MonoBehaviour script in activeScripts)
-                {
-                    if (script == null || !script.enabled) continue;
-
-                    if (IsWearableVehicle(script))
+                    Car car = mount.GetComponent<Car>();
+                    if (car != null)
                     {
-                        GameObject modelObj = GetToolModelObject(script);
-                        if (modelObj != null)
+                        if (car.countLabel != null)
                         {
-                            currentTargets.Add(modelObj);
+                            _currentUIWidgets.Add(car.countLabel);
+                            if (car.countLabel.transform.parent != null)
+                            {
+                                _currentTargets.Add(car.countLabel.transform.parent.gameObject);
+                            }
+                        }
+                        if (car.filledBar != null)
+                        {
+                            _currentUIWidgets.Add(car.filledBar);
+                            if (car.filledBar.transform.parent != null)
+                            {
+                                _currentTargets.Add(car.filledBar.transform.parent.gameObject);
+                            }
+                        }
+                        if (car.speedLabel != null)
+                        {
+                            _currentUIWidgets.Add(car.speedLabel);
+                            if (car.speedLabel.transform.parent != null)
+                            {
+                                _currentTargets.Add(car.speedLabel.transform.parent.gameObject);
+                            }
+                        }
+
+                        if (car.wheels != null)
+                        {
+                            for (int w = 0; w < car.wheels.Length; w++)
+                            {
+                                if (car.wheels[w] != null) _currentTargets.Add(car.wheels[w]);
+                            }
                         }
                     }
                 }
+
+                JetPackTool[] jetpacks = Object.FindObjectsByType<JetPackTool>(FindObjectsSortMode.None);
+                for (int i = 0; i < jetpacks.Length; i++)
+                {
+                    JetPackTool jp = jetpacks[i];
+                    if (jp != null && jp.enabled)
+                    {
+                        if (jp.model != null)
+                        {
+                            _currentTargets.Add(jp.model);
+
+                            JetpackPanel panel = jp.model.GetComponentInChildren<JetpackPanel>(true);
+                            if (panel != null)
+                            {
+                                _currentTargets.Add(panel.gameObject);
+                                if (panel.countLabel != null) _currentUIWidgets.Add(panel.countLabel);
+                            }
+                        }
+                    }
+                }
+
+                SubmarineTool[] submarines = Object.FindObjectsByType<SubmarineTool>(FindObjectsSortMode.None);
+                for (int i = 0; i < submarines.Length; i++)
+                {
+                    SubmarineTool sub = submarines[i];
+                    if (sub != null && sub.enabled)
+                    {
+                        if (sub.model != null) _currentTargets.Add(sub.model);
+                        if (sub.coalCountObj != null) _currentTargets.Add(sub.coalCountObj);
+                        if (sub.label != null) _currentUIWidgets.Add(sub.label);
+                    }
+                }
             }
 
-            List<GameObject> toRemove = new List<GameObject>();
+            _toRemoveObjects.Clear();
             foreach (GameObject obj in _hiddenObjects)
             {
-                if (obj == null || !currentTargets.Contains(obj))
+                if (obj == null || !_currentTargets.Contains(obj))
                 {
                     if (obj != null)
                     {
-                        SetRenderersVisible(obj, true);
+                        SetRenderersAndUIVisible(obj, true);
                     }
-                    toRemove.Add(obj);
+                    _toRemoveObjects.Add(obj);
                 }
             }
-
-            foreach (GameObject obj in toRemove)
+            for (int i = 0; i < _toRemoveObjects.Count; i++)
             {
-                _hiddenObjects.Remove(obj);
+                _hiddenObjects.Remove(_toRemoveObjects[i]);
             }
 
-            foreach (GameObject obj in currentTargets)
+            _toRemoveWidgets.Clear();
+            foreach (Behaviour widget in _hiddenUIWidgets)
+            {
+                if (widget == null || !_currentUIWidgets.Contains(widget))
+                {
+                    if (widget != null)
+                    {
+                        widget.enabled = true;
+                    }
+                    _toRemoveWidgets.Add(widget);
+                }
+            }
+            for (int i = 0; i < _toRemoveWidgets.Count; i++)
+            {
+                _hiddenUIWidgets.Remove(_toRemoveWidgets[i]);
+            }
+
+            foreach (GameObject obj in _currentTargets)
             {
                 if (obj != null)
                 {
-                    SetRenderersVisible(obj, false);
+                    SetRenderersAndUIVisible(obj, false);
                     _hiddenObjects.Add(obj);
                 }
             }
-        }
 
-        private bool IsWearableVehicle(MonoBehaviour script)
-        {
-            if (script is JetPackTool) return true;
-
-            string typeName = script.GetType().Name;
-            return typeName.IndexOf("JetPack", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   typeName.IndexOf("Jetpack", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   typeName.IndexOf("Submarine", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   typeName.IndexOf("Diving", System.StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private GameObject GetToolModelObject(MonoBehaviour tool)
-        {
-            string[] possibleFields = { "model", "modelObject", "mesh", "visual", "suit" };
-            foreach (string fieldName in possibleFields)
+            foreach (Behaviour widget in _currentUIWidgets)
             {
-                FieldInfo field = tool.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                if (field != null)
+                if (widget != null)
                 {
-                    GameObject model = field.GetValue(tool) as GameObject;
-                    if (model != null) return model;
+                    if (widget.enabled != false)
+                    {
+                        widget.enabled = false;
+                    }
+                    _hiddenUIWidgets.Add(widget);
                 }
             }
-
-            return tool.gameObject;
         }
 
-        private void SetRenderersVisible(GameObject obj, bool visible)
+        private bool IsAnySuitActive()
+        {
+            JetPackTool[] jetpacks = Object.FindObjectsByType<JetPackTool>(FindObjectsSortMode.None);
+            for (int i = 0; i < jetpacks.Length; i++)
+            {
+                if (jetpacks[i] != null && jetpacks[i].enabled) return true;
+            }
+
+            SubmarineTool[] submarines = Object.FindObjectsByType<SubmarineTool>(FindObjectsSortMode.None);
+            for (int i = 0; i < submarines.Length; i++)
+            {
+                if (submarines[i] != null && submarines[i].enabled) return true;
+            }
+
+            return false;
+        }
+
+        private static void SetRenderersAndUIVisible(GameObject obj, bool visible)
         {
             if (obj == null) return;
 
             Renderer[] renderers = obj.GetComponentsInChildren<Renderer>(true);
-            foreach (Renderer r in renderers)
+            for (int i = 0; i < renderers.Length; i++)
             {
-                if (r.enabled != visible)
+                Renderer r = renderers[i];
+                if (r != null && r.enabled != visible)
                 {
                     r.enabled = visible;
+                }
+            }
+
+            MonoBehaviour[] uiComponents = obj.GetComponentsInChildren<MonoBehaviour>(true);
+            for (int i = 0; i < uiComponents.Length; i++)
+            {
+                MonoBehaviour comp = uiComponents[i];
+                if (comp == null || comp == obj.transform) continue;
+
+                string typeName = comp.GetType().Name;
+                if (typeName.Contains("UI") || typeName.Contains("Label") || typeName.Contains("Sprite") || typeName.Contains("Widget") || typeName.Contains("Panel"))
+                {
+                    if (comp.enabled != visible)
+                    {
+                        comp.enabled = visible;
+                    }
                 }
             }
         }
