@@ -10,7 +10,7 @@ using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.eldiriarfix", "EldriarTweaks", "8.3.0")]
+    [BepInPlugin("com.malts.blockstory.eldiriarfix", "EldriarTweaks", "9.3.0")]
     [BepInDependency(Core.Guid)]
     public class EldiriarFixPlugin : BaseUnityPlugin
     {
@@ -18,18 +18,24 @@ namespace BlockStoryMod
 
         public static bool Enabled = PlayerPrefs.GetInt("EldiriarFix_Enabled", 1) != 0;
         public static bool MountedAbility = PlayerPrefs.GetInt("EldiriarFix_MountedAbility", 1) != 0;
+        public static bool HoldToAttack = PlayerPrefs.GetInt("EldiriarFix_HoldToAttack", 0) != 0;
         public static bool UnmountedAIBoost = PlayerPrefs.GetInt("EldiriarFix_UnmountedAIBoost", 1) != 0;
         public static bool HomingProjectiles = PlayerPrefs.GetInt("EldiriarFix_HomingProjectiles", 1) != 0;
         public static bool EnhancedRange = PlayerPrefs.GetInt("EldiriarFix_EnhancedRange", 1) != 0;
         public static bool CleanGhostProjectiles = PlayerPrefs.GetInt("EldiriarFix_CleanGhostProjectiles", 1) != 0;
         public static bool FilterNeutralTargets = PlayerPrefs.GetInt("EldiriarFix_FilterNeutralTargets", 1) != 0;
+        public static bool AlternateProjectiles = PlayerPrefs.GetInt("EldiriarFix_AlternateProjectiles", PlayerPrefs.GetInt("EldiriarFix_AlternateMeteors", 1)) != 0;
 
         private ISRef _key;
 
         private float _lastMountedAttackTime = 0f;
         public float MountedAttackCooldown = 2.0f;
+        private float _aiScanTimer = 0f;
 
         private readonly Dictionary<int, float> _unmountedAttackTimers = new Dictionary<int, float>();
+
+        private static readonly FieldInfo AnimField = typeof(BehaviourController).GetField("animation", BindingFlags.Public | BindingFlags.Instance);
+        private static MethodInfo _crossFadeMethod;
 
         private void Awake()
         {
@@ -86,7 +92,12 @@ namespace BlockStoryMod
 
             HandleMountedEldriar();
 
-            FixUnmountedEldriarAI();
+            _aiScanTimer += Time.deltaTime;
+            if (_aiScanTimer >= 0.25f)
+            {
+                _aiScanTimer = 0f;
+                FixUnmountedEldriarAI();
+            }
         }
 
         private void HandleMountedEldriar()
@@ -96,7 +107,10 @@ namespace BlockStoryMod
             BehaviourController mountedEldriar = GetMountedEldriar();
             if (mountedEldriar == null) return;
 
-            bool inputTriggered = BSKeybinds.Pressed(_key);
+            mountedEldriar.target = null;
+
+            bool isHeld = _key != null && _key.action != null && _key.action.IsPressed();
+            bool inputTriggered = HoldToAttack ? (BSKeybinds.Pressed(_key) || isHeld) : BSKeybinds.Pressed(_key);
 
             if (inputTriggered && Time.time >= _lastMountedAttackTime + MountedAttackCooldown)
             {
@@ -104,9 +118,9 @@ namespace BlockStoryMod
 
                 TryPlayAnimation(mountedEldriar, "attack");
 
-                GameObject target = GetBestHostileTarget(mountedEldriar);
+                List<GameObject> targets = GetHostileTargets(mountedEldriar, maxTargets: 5, maxDist: 40f, requireOnScreen: true);
 
-                StartCoroutine(LaunchHomingAbilities(mountedEldriar, target));
+                StartCoroutine(LaunchHomingAbilities(mountedEldriar, targets, isMounted: true));
             }
         }
 
@@ -154,7 +168,13 @@ namespace BlockStoryMod
                     if (controller.attackForwardCosine > -0.5f) controller.attackForwardCosine = -0.5f;
                 }
 
-                if (IsRidingThisEldriar(controller) || !UnmountedAIBoost) continue;
+                if (IsRidingThisEldriar(controller))
+                {
+                    controller.target = null;
+                    continue;
+                }
+
+                if (!UnmountedAIBoost) continue;
 
                 int id = controller.GetInstanceID();
                 if (!_unmountedAttackTimers.ContainsKey(id))
@@ -162,25 +182,29 @@ namespace BlockStoryMod
                     _unmountedAttackTimers[id] = Time.time;
                 }
 
-                if (controller.target != null && IsHostileTarget(controller.target) && !Inventory.isPaused)
+                if (controller.target != null && IsHostileTarget(controller.target, controller) && !Inventory.isPaused)
                 {
                     float dist = Vector3.Distance(controller.transform.position, controller.target.transform.position);
 
                     if (dist <= 40f && Time.time >= _unmountedAttackTimers[id] + 3.0f)
                     {
                         _unmountedAttackTimers[id] = Time.time;
-                        StartCoroutine(LaunchHomingAbilities(controller, controller.target));
+
+                        List<GameObject> targets = GetHostileTargets(controller, maxTargets: 5, maxDist: 40f, requireOnScreen: false);
+                        StartCoroutine(LaunchHomingAbilities(controller, targets, isMounted: false));
                     }
                 }
             }
+
+            if (_unmountedAttackTimers.Count > 32)
+            {
+                _unmountedAttackTimers.Clear();
+            }
         }
 
-        private IEnumerator LaunchHomingAbilities(BehaviourController controller, GameObject targetGo)
+        private IEnumerator LaunchHomingAbilities(BehaviourController controller, List<GameObject> targets, bool isMounted)
         {
             if (controller == null) yield break;
-
-            Transform targetTransform = targetGo != null ? targetGo.transform : null;
-            Health targetHealth = targetGo != null ? targetGo.GetComponent<Health>() : null;
 
             PetExperience exp = controller.GetComponent<PetExperience>();
             int level = exp != null ? exp.curLvl : 50;
@@ -197,12 +221,25 @@ namespace BlockStoryMod
             float damage = fireballSettings.demage > 0 ? fireballSettings.demage : 120f;
             float speed = fireballSettings.speed > 0 ? fireballSettings.speed : 14f;
 
+            int targetCount = targets != null ? targets.Count : 0;
+
             var fireballData = fireballSettings.fireballs[0];
             int fireballCount = 5;
+            float fbSpeed = AlternateProjectiles ? speed * 2.2f : speed * 1.2f;
 
             for (int i = 0; i < fireballCount; i++)
             {
                 if (controller == null) yield break;
+
+                GameObject assignedTarget = targetCount > 0 ? targets[i % targetCount] : null;
+
+                if (!IsHostileTarget(assignedTarget, controller))
+                {
+                    assignedTarget = null;
+                }
+
+                Transform targetTransform = assignedTarget != null ? assignedTarget.transform : null;
+                Health targetHealth = assignedTarget != null ? assignedTarget.GetComponent<Health>() : null;
 
                 Vector3 spawnPos = fireballData.spawnPoint != null ? fireballData.spawnPoint.position : controller.transform.position + controller.transform.forward * 2f;
                 Quaternion spawnRot = controller.transform.rotation;
@@ -220,18 +257,16 @@ namespace BlockStoryMod
                 if (homing != null)
                 {
                     bool useHoming = HomingProjectiles && (targetTransform != null);
-                    homing.InitSettings(
-                        useHoming ? targetTransform : null,
-                        controller.gameObject,
-                        damage,
-                        speed * 1.2f,
-                        useHoming ? 8f : 0f,
-                        true,
-                        false,
-                        fireballItem,
-                        3.0f,
-                        useHoming
-                    );
+
+                    if (isMounted && useHoming)
+                    {
+                        homing.InitSettings(null, controller.gameObject, damage, fbSpeed, 0f, true, false, fireballItem, 3.0f, false);
+                        StartCoroutine(EnableHomingDelayed(fb, homing, targetTransform, controller.gameObject, damage, fbSpeed, rotSpeed: 180f, fireballItem, delay: 0.4f));
+                    }
+                    else
+                    {
+                        homing.InitSettings(useHoming ? targetTransform : null, controller.gameObject, damage, fbSpeed, useHoming ? 180f : 0f, true, false, fireballItem, 3.0f, useHoming);
+                    }
                 }
 
                 yield return new WaitForSeconds(0.08f);
@@ -240,7 +275,7 @@ namespace BlockStoryMod
             if (level >= 39)
             {
                 int meteorCount = 1;
-                if (level >= 49) meteorCount = 3; 
+                if (level >= 49) meteorCount = 3;
                 else if (level >= 44) meteorCount = 2;
                 else meteorCount = 1;
 
@@ -250,15 +285,25 @@ namespace BlockStoryMod
                 {
                     if (controller == null) yield break;
 
+                    GameObject assignedTarget = targetCount > 0 ? targets[m % targetCount] : null;
+
+                    if (!IsHostileTarget(assignedTarget, controller))
+                    {
+                        assignedTarget = null;
+                    }
+
+                    Transform targetTransform = assignedTarget != null ? assignedTarget.transform : null;
+                    Health targetHealth = assignedTarget != null ? assignedTarget.GetComponent<Health>() : null;
+
                     Vector3 meteorSpawnPos;
                     if (targetTransform != null)
                     {
-                        Vector3 offset = new Vector3(UnityEngine.Random.Range(-2f, 2f), 24f + (m * 4f), UnityEngine.Random.Range(-2f, 2f));
+                        Vector3 offset = new Vector3(UnityEngine.Random.Range(-2.5f, 2.5f), 28f + (m * 5f), UnityEngine.Random.Range(-2.5f, 2.5f));
                         meteorSpawnPos = targetTransform.position + offset;
                     }
                     else
                     {
-                        Vector3 offset = controller.transform.forward * (12f + m * 5f) + new Vector3(UnityEngine.Random.Range(-2f, 2f), 24f, UnityEngine.Random.Range(-2f, 2f));
+                        Vector3 offset = controller.transform.forward * (12f + m * 5f) + new Vector3(UnityEngine.Random.Range(-2f, 2f), 28f, UnityEngine.Random.Range(-2f, 2f));
                         meteorSpawnPos = controller.transform.position + offset;
                     }
 
@@ -275,31 +320,64 @@ namespace BlockStoryMod
                     GameObject meteor = Instantiate(meteorData.fireBall, meteorSpawnPos, meteorRot);
                     meteor.transform.localScale = new Vector3(3.5f, 3.5f, 3.5f);
 
+                    float meteorLifetime = AlternateProjectiles ? 2.5f : 4.5f;
+
                     if (CleanGhostProjectiles)
                     {
                         ProjectileCleaner cleaner = meteor.AddComponent<ProjectileCleaner>();
-                        cleaner.Init(targetTransform, targetHealth, maxLifetime: 4.5f);
+                        cleaner.Init(targetTransform, targetHealth, maxLifetime: meteorLifetime);
                     }
 
                     Homing homing = meteor.GetComponent<Homing>();
                     if (homing != null)
                     {
-                        bool useHoming = HomingProjectiles && (targetTransform != null);
-                        homing.InitSettings(
-                            useHoming ? targetTransform : null,
-                            controller.gameObject,
-                            damage * 1.8f,
-                            18f,
-                            useHoming ? 4f : 0f,
-                            true,
-                            false,
-                            meteorItem,
-                            4.5f,
-                            useHoming
-                        );
+                        if (AlternateProjectiles)
+                        {
+                            bool useHoming = HomingProjectiles && (targetTransform != null);
+                            homing.InitSettings(
+                                useHoming ? targetTransform : null,
+                                controller.gameObject,
+                                damage * 1.8f,
+                                55f,
+                                useHoming ? 350f : 0f,
+                                true,
+                                false,
+                                meteorItem,
+                                meteorLifetime,
+                                useHoming
+                            );
+                        }
+                        else
+                        {
+                            bool useHoming = HomingProjectiles && (targetTransform != null);
+                            homing.InitSettings(
+                                useHoming ? targetTransform : null,
+                                controller.gameObject,
+                                damage * 1.8f,
+                                18f,
+                                useHoming ? 4f : 0f,
+                                true,
+                                false,
+                                meteorItem,
+                                meteorLifetime,
+                                useHoming
+                            );
+                        }
                     }
                 }
             }
+        }
+
+        private IEnumerator EnableHomingDelayed(GameObject projectile, Homing homing, Transform targetTransform, GameObject user, float damage, float speed, float rotSpeed, InvBaseItem item, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+
+            if (projectile == null || homing == null || targetTransform == null) yield break;
+
+            Health h = targetTransform.GetComponent<Health>();
+            if (h != null && h.IsDead()) yield break;
+
+            homing.InitSettings(targetTransform, user, damage, speed, rotSpeed, true, false, item, 3.0f, true);
         }
 
         private BehaviourController GetMountedEldriar()
@@ -324,34 +402,55 @@ namespace BlockStoryMod
             return PlayerMounted.mounted == controller.gameObject;
         }
 
-        private GameObject GetBestHostileTarget(BehaviourController controller)
+        private List<GameObject> GetHostileTargets(BehaviourController controller, int maxTargets, float maxDist, bool requireOnScreen)
         {
-            if (controller.target != null && IsHostileTarget(controller.target))
-            {
-                return controller.target;
-            }
-
+            List<GameObject> list = new List<GameObject>();
             Camera cam = Camera.main;
+
             if (cam != null)
             {
                 Ray ray = new Ray(cam.transform.position, cam.transform.forward);
-                if (Physics.Raycast(ray, out RaycastHit hit, 70f))
+                RaycastHit[] hits = Physics.RaycastAll(ray, 70f);
+                Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+                foreach (RaycastHit hit in hits)
                 {
                     GameObject hitGo = hit.collider.gameObject;
-                    if (IsHostileTarget(hitGo)) return hitGo;
+                    if (IsHostileTarget(hitGo, controller))
+                    {
+                        list.Add(hitGo);
+                        break;
+                    }
 
                     Transform current = hitGo.transform.parent;
+                    bool foundParent = false;
                     while (current != null)
                     {
-                        if (IsHostileTarget(current.gameObject)) return current.gameObject;
+                        if (IsHostileTarget(current.gameObject, controller))
+                        {
+                            list.Add(current.gameObject);
+                            foundParent = true;
+                            break;
+                        }
                         current = current.parent;
+                    }
+                    if (foundParent) break;
+                }
+            }
+
+            if (controller.target != null && IsHostileTarget(controller.target, controller))
+            {
+                if (!requireOnScreen || IsOnScreen(controller.target, cam))
+                {
+                    if (!list.Contains(controller.target))
+                    {
+                        list.Add(controller.target);
                     }
                 }
             }
 
             Vector3 pos = controller.transform.position;
-            float closestSqr = 40f * 40f;
-            GameObject closest = null;
+            float sqrMax = maxDist * maxDist;
 
 #pragma warning disable CS0618
             GameObject[] enemies = GameObject.FindGameObjectsWithTag("Enemy");
@@ -359,22 +458,40 @@ namespace BlockStoryMod
 
             foreach (GameObject enemy in enemies)
             {
-                if (enemy == null || !IsHostileTarget(enemy)) continue;
+                if (enemy == null || list.Contains(enemy) || !IsHostileTarget(enemy, controller)) continue;
+
+                if (requireOnScreen && !IsOnScreen(enemy, cam)) continue;
 
                 float sqr = (enemy.transform.position - pos).sqrMagnitude;
-                if (sqr < closestSqr)
+                if (sqr <= sqrMax)
                 {
-                    closestSqr = sqr;
-                    closest = enemy;
+                    list.Add(enemy);
+                    if (list.Count >= maxTargets) break;
                 }
             }
 
-            return closest;
+            return list;
         }
 
-        private bool IsHostileTarget(GameObject go)
+        private bool IsOnScreen(GameObject go, Camera cam)
+        {
+            if (go == null || cam == null) return false;
+            Vector3 vp = cam.WorldToViewportPoint(go.transform.position);
+            return vp.z > 0f && vp.x >= 0.05f && vp.x <= 0.95f && vp.y >= 0.05f && vp.y <= 0.95f;
+        }
+
+        private bool IsHostileTarget(GameObject go, BehaviourController controller = null)
         {
             if (go == null) return false;
+
+            if (go.CompareTag("Player") || go.CompareTag("Pet")) return false;
+
+            if (controller != null)
+            {
+                if (go == controller.gameObject || go == controller.player) return false;
+            }
+
+            if (IsEldriar(go.GetComponent<BehaviourController>())) return false;
 
             Health h = go.GetComponent<Health>();
             if (h == null || h.IsDead()) return false;
@@ -391,13 +508,14 @@ namespace BlockStoryMod
         {
             try
             {
-                FieldInfo animField = typeof(BehaviourController).GetField("animation", BindingFlags.Public | BindingFlags.Instance);
-                object animObj = animField?.GetValue(controller);
-
+                object animObj = AnimField?.GetValue(controller);
                 if (animObj != null)
                 {
-                    MethodInfo crossFadeMethod = animObj.GetType().GetMethod("CrossFade", new Type[] { typeof(string), typeof(float) });
-                    crossFadeMethod?.Invoke(animObj, new object[] { animName, 0.2f });
+                    if (_crossFadeMethod == null)
+                    {
+                        _crossFadeMethod = animObj.GetType().GetMethod("CrossFade", new Type[] { typeof(string), typeof(float) });
+                    }
+                    _crossFadeMethod?.Invoke(animObj, new object[] { animName, 0.2f });
                 }
             }
             catch { }
@@ -536,17 +654,17 @@ namespace BlockStoryMod
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _dim);
 
             float width = Mathf.Min(570f, Screen.width * 0.82f);
-            float height = Mathf.Min(570f, Screen.height * 0.94f);
+            float height = Mathf.Min(650f, Screen.height * 0.96f);
             float x = (Screen.width - width) / 2f;
             float y = (Screen.height - height) / 2f;
 
             GUI.Box(new Rect(x, y, width, height), GUIContent.none, Theme.Window);
             GUI.Label(new Rect(x, y + 14f, width, 30f), "Eldriar Tweaks Settings", _title);
 
-            float contentY = y + 50f;
+            float contentY = y + 44f;
             float contentWidth = width - 48f;
-            float btnHeight = 35f;
-            float btnSpacing = 40f;
+            float btnHeight = 30f;
+            float btnSpacing = 34f;
 
             string hoveredDesc = "Hover over any option to see what it does.";
             Vector2 mousePos = Event.current.mousePosition;
@@ -568,12 +686,12 @@ namespace BlockStoryMod
             Rect r2 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r2.Contains(mousePos))
             {
-                hoveredDesc = "Tweaks Eldriar's AI so he automatically casts Fireballs/Meteors every 3 seconds in combat when dismounted.";
+                hoveredDesc = "The Mounted Attack key can be held to shoot rapidly instead of clicking it lot of times. The projectiles will still shoot at their regular intervals.";
             }
-            if (DrawToggleButton(r2, "AI Tweaks", EldiriarFixPlugin.UnmountedAIBoost))
+            if (DrawToggleButton(r2, "Hold To Attack", EldiriarFixPlugin.HoldToAttack, enabled: EldiriarFixPlugin.MountedAbility))
             {
-                EldiriarFixPlugin.UnmountedAIBoost = !EldiriarFixPlugin.UnmountedAIBoost;
-                PlayerPrefs.SetInt("EldiriarFix_UnmountedAIBoost", EldiriarFixPlugin.UnmountedAIBoost ? 1 : 0);
+                EldiriarFixPlugin.HoldToAttack = !EldiriarFixPlugin.HoldToAttack;
+                PlayerPrefs.SetInt("EldiriarFix_HoldToAttack", EldiriarFixPlugin.HoldToAttack ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
@@ -582,12 +700,12 @@ namespace BlockStoryMod
             Rect r3 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r3.Contains(mousePos))
             {
-                hoveredDesc = "Makes Fireballs/Meteors actively steer and home in on targets instead of whatever it does in vanilla. Does not home in on Animals or Neutral mobs.";
+                hoveredDesc = "Tweaks Eldriar's AI so he automatically casts Fireballs/Meteors every 3 seconds in combat when dismounted.";
             }
-            if (DrawToggleButton(r3, "Homing Projectiles", EldiriarFixPlugin.HomingProjectiles))
+            if (DrawToggleButton(r3, "AI Tweaks", EldiriarFixPlugin.UnmountedAIBoost))
             {
-                EldiriarFixPlugin.HomingProjectiles = !EldiriarFixPlugin.HomingProjectiles;
-                PlayerPrefs.SetInt("EldiriarFix_HomingProjectiles", EldiriarFixPlugin.HomingProjectiles ? 1 : 0);
+                EldiriarFixPlugin.UnmountedAIBoost = !EldiriarFixPlugin.UnmountedAIBoost;
+                PlayerPrefs.SetInt("EldiriarFix_UnmountedAIBoost", EldiriarFixPlugin.UnmountedAIBoost ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
@@ -596,12 +714,12 @@ namespace BlockStoryMod
             Rect r4 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r4.Contains(mousePos))
             {
-                hoveredDesc = "Increases Eldriar's attack range (Essentially makes him into a ranged pet like Mech/Snowman).";
+                hoveredDesc = "Makes Fireballs/Meteors actively steer and home in on targets instead of whatever it does in vanilla. Does not home in on Animals or Neutral mobs.";
             }
-            if (DrawToggleButton(r4, "Increased Attack Range", EldiriarFixPlugin.EnhancedRange))
+            if (DrawToggleButton(r4, "Homing Projectiles", EldiriarFixPlugin.HomingProjectiles))
             {
-                EldiriarFixPlugin.EnhancedRange = !EldiriarFixPlugin.EnhancedRange;
-                PlayerPrefs.SetInt("EldiriarFix_EnhancedRange", EldiriarFixPlugin.EnhancedRange ? 1 : 0);
+                EldiriarFixPlugin.HomingProjectiles = !EldiriarFixPlugin.HomingProjectiles;
+                PlayerPrefs.SetInt("EldiriarFix_HomingProjectiles", EldiriarFixPlugin.HomingProjectiles ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
@@ -610,12 +728,12 @@ namespace BlockStoryMod
             Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r5.Contains(mousePos))
             {
-                hoveredDesc = "WARNING: RECOMMENDED TO BE ON BY DEFAULT! Automatically removes fireballs/meteors if the target dies or if the projectile get stuck on terrain or fluids and never explode or despawn.";
+                hoveredDesc = "Increases Eldriar's attack range (Essentially makes him into a ranged pet like Mech/Snowman).";
             }
-            if (DrawToggleButton(r5, "Projectile Cleanup", EldiriarFixPlugin.CleanGhostProjectiles))
+            if (DrawToggleButton(r5, "Increased Attack Range", EldiriarFixPlugin.EnhancedRange))
             {
-                EldiriarFixPlugin.CleanGhostProjectiles = !EldiriarFixPlugin.CleanGhostProjectiles;
-                PlayerPrefs.SetInt("EldiriarFix_CleanGhostProjectiles", EldiriarFixPlugin.CleanGhostProjectiles ? 1 : 0);
+                EldiriarFixPlugin.EnhancedRange = !EldiriarFixPlugin.EnhancedRange;
+                PlayerPrefs.SetInt("EldiriarFix_EnhancedRange", EldiriarFixPlugin.EnhancedRange ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
@@ -624,20 +742,48 @@ namespace BlockStoryMod
             Rect r6 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r6.Contains(mousePos))
             {
+                hoveredDesc = "WARNING: RECOMMENDED TO BE ON BY DEFAULT! Automatically removes fireballs/meteors if the target dies or if the projectile get stuck on terrain or fluids and never explode or despawn.";
+            }
+            if (DrawToggleButton(r6, "Projectile Cleanup", EldiriarFixPlugin.CleanGhostProjectiles))
+            {
+                EldiriarFixPlugin.CleanGhostProjectiles = !EldiriarFixPlugin.CleanGhostProjectiles;
+                PlayerPrefs.SetInt("EldiriarFix_CleanGhostProjectiles", EldiriarFixPlugin.CleanGhostProjectiles ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+
+            contentY += btnSpacing;
+
+            Rect r7 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r7.Contains(mousePos))
+            {
                 hoveredDesc = "Prevents Eldriar's fireballs/meteors from damaging NPCs. Passive animals and angry NPCs can still be damaged.";
             }
-            if (DrawToggleButton(r6, "NPC Protection", EldiriarFixPlugin.FilterNeutralTargets))
+            if (DrawToggleButton(r7, "NPC Protection", EldiriarFixPlugin.FilterNeutralTargets))
             {
                 EldiriarFixPlugin.FilterNeutralTargets = !EldiriarFixPlugin.FilterNeutralTargets;
                 PlayerPrefs.SetInt("EldiriarFix_FilterNeutralTargets", EldiriarFixPlugin.FilterNeutralTargets ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
-            float descY = y + 298f;
-            float descHeight = 190f;
+            contentY += btnSpacing;
+
+            Rect r8 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r8.Contains(mousePos))
+            {
+                hoveredDesc = "Speeds up fireballs and meteors. Fireballs move much faster and meteors fall down faster in straight lines.";
+            }
+            if (DrawToggleButton(r8, "Faster Projectiles", EldiriarFixPlugin.AlternateProjectiles))
+            {
+                EldiriarFixPlugin.AlternateProjectiles = !EldiriarFixPlugin.AlternateProjectiles;
+                PlayerPrefs.SetInt("EldiriarFix_AlternateProjectiles", EldiriarFixPlugin.AlternateProjectiles ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+
+            float descY = y + 322f;
+            float descHeight = 180f;
             GUI.Label(new Rect(x + 24f, descY, contentWidth, descHeight), hoveredDesc, _desc);
 
-            Rect backRect = new Rect(x + 24f, y + height - 16f - 40f, width - 48f, 40f);
+            Rect backRect = new Rect(x + 24f, y + height - 14f - 36f, width - 48f, 36f);
             if (GUI.Button(backRect, "Back", _back))
             {
                 Close();
@@ -711,10 +857,10 @@ namespace BlockStoryMod
                 }
             }
 
-            float movedDist = Vector3.Distance(transform.position, _lastPos);
+            float movedDistSqr = (transform.position - _lastPos).sqrMagnitude;
             _lastPos = transform.position;
 
-            if (movedDist < 0.05f)
+            if (movedDistSqr < 0.0025f)
             {
                 _stuckTimer += Time.deltaTime;
                 if (_stuckTimer >= 0.5f)
