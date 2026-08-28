@@ -10,7 +10,7 @@ using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.eldiriarfix", "EldriarTweaks", "9.3.0")]
+    [BepInPlugin("com.malts.blockstory.eldiriarfix", "EldriarTweaks", "9.5.0")]
     [BepInDependency(Core.Guid)]
     public class EldiriarFixPlugin : BaseUnityPlugin
     {
@@ -162,12 +162,6 @@ namespace BlockStoryMod
                     }
                 }
 
-                if (EnhancedRange)
-                {
-                    if (controller.attackRange < 35f) controller.attackRange = 35f;
-                    if (controller.attackForwardCosine > -0.5f) controller.attackForwardCosine = -0.5f;
-                }
-
                 if (IsRidingThisEldriar(controller))
                 {
                     controller.target = null;
@@ -185,12 +179,13 @@ namespace BlockStoryMod
                 if (controller.target != null && IsHostileTarget(controller.target, controller) && !Inventory.isPaused)
                 {
                     float dist = Vector3.Distance(controller.transform.position, controller.target.transform.position);
+                    float maxCastDist = EnhancedRange ? 35f : 15f;
 
-                    if (dist <= 40f && Time.time >= _unmountedAttackTimers[id] + 3.0f)
+                    if (dist <= maxCastDist && Time.time >= _unmountedAttackTimers[id] + 3.0f)
                     {
                         _unmountedAttackTimers[id] = Time.time;
 
-                        List<GameObject> targets = GetHostileTargets(controller, maxTargets: 5, maxDist: 40f, requireOnScreen: false);
+                        List<GameObject> targets = GetHostileTargets(controller, maxTargets: 5, maxDist: maxCastDist, requireOnScreen: false);
                         StartCoroutine(LaunchHomingAbilities(controller, targets, isMounted: false));
                     }
                 }
@@ -728,9 +723,9 @@ namespace BlockStoryMod
             Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r5.Contains(mousePos))
             {
-                hoveredDesc = "Increases Eldriar's attack range (Essentially makes him into a ranged pet like Mech/Snowman).";
+                hoveredDesc = "Increases Eldriar's fireball/meteor range. Melee range is unaffected.";
             }
-            if (DrawToggleButton(r5, "Increased Attack Range", EldiriarFixPlugin.EnhancedRange))
+            if (DrawToggleButton(r5, "Increased Projectile Attack Range", EldiriarFixPlugin.EnhancedRange))
             {
                 EldiriarFixPlugin.EnhancedRange = !EldiriarFixPlugin.EnhancedRange;
                 PlayerPrefs.SetInt("EldiriarFix_EnhancedRange", EldiriarFixPlugin.EnhancedRange ? 1 : 0);
