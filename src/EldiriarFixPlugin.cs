@@ -726,9 +726,9 @@ namespace BlockStoryMod
             Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r5.Contains(mousePos))
             {
-                hoveredDesc = "Increases Eldriar's ranged fireball/meteor engagement distance to 35m without affecting his melee bite range.";
+                hoveredDesc = "Increases Eldriar's fireball/meteor attack range.";
             }
-            if (DrawToggleButton(r5, "Increased Attack Range", EldiriarFixPlugin.EnhancedRange))
+            if (DrawToggleButton(r5, "Increased Projectile Attack Range", EldiriarFixPlugin.EnhancedRange))
             {
                 EldiriarFixPlugin.EnhancedRange = !EldiriarFixPlugin.EnhancedRange;
                 PlayerPrefs.SetInt("EldiriarFix_EnhancedRange", EldiriarFixPlugin.EnhancedRange ? 1 : 0);
