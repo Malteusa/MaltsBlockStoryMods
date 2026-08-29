@@ -42,6 +42,13 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Protect friendly NPCs from Fireballs/Meteors *(~except the ones in his idle animation...~ Well, sometimes...)*.
   * Projectiles are automatically cleaned up once the enemy dies.
 ---
+* **Mounted Mech Attack**: A highly configurable mod focuses on firing rockets on the Mech while mounted.
+  > All features can be toggled using the in-game mods list config.
+  * Fire rockets on Right-Click when mounted, as long as you have rockets in the Mech's inventory.
+  * Option to make it fire when the key is held instead. **(Disabled by Default)**
+  * Rockets are faster and home in better. Vanilla rocket speed can be enabled in the config.
+  * Rockets fired by the Mech no longer destroy terrain. Terrain Destruction can be enabled in the config.
+---
 * **Mount Visibility**: Adds a Keybind to hide whatever mount, pet, or vehicle you are riding or have equipped.
   > Uses a Keybind *(Default: `H`)*
   * Hide any mount, vehicle, or pet so you can actually see your screen.
