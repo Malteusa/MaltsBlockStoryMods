@@ -10,7 +10,7 @@ using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.eldiriarfix", "EldriarTweaks", "9.5.0")]
+    [BepInPlugin("com.malts.blockstory.eldiriarfix", "EldriarTweaks", "9.6.0")]
     [BepInDependency(Core.Guid)]
     public class EldiriarFixPlugin : BaseUnityPlugin
     {
@@ -411,7 +411,7 @@ namespace BlockStoryMod
                 foreach (RaycastHit hit in hits)
                 {
                     GameObject hitGo = hit.collider.gameObject;
-                    if (IsHostileTarget(hitGo, controller))
+                    if (IsHostileTarget(hitGo, controller) && !controller.TroughtWall(hitGo))
                     {
                         list.Add(hitGo);
                         break;
@@ -421,7 +421,7 @@ namespace BlockStoryMod
                     bool foundParent = false;
                     while (current != null)
                     {
-                        if (IsHostileTarget(current.gameObject, controller))
+                        if (IsHostileTarget(current.gameObject, controller) && !controller.TroughtWall(current.gameObject))
                         {
                             list.Add(current.gameObject);
                             foundParent = true;
@@ -433,7 +433,7 @@ namespace BlockStoryMod
                 }
             }
 
-            if (controller.target != null && IsHostileTarget(controller.target, controller))
+            if (controller.target != null && IsHostileTarget(controller.target, controller) && !controller.TroughtWall(controller.target))
             {
                 if (!requireOnScreen || IsOnScreen(controller.target, cam))
                 {
@@ -453,7 +453,7 @@ namespace BlockStoryMod
 
             foreach (GameObject enemy in enemies)
             {
-                if (enemy == null || list.Contains(enemy) || !IsHostileTarget(enemy, controller)) continue;
+                if (enemy == null || list.Contains(enemy) || !IsHostileTarget(enemy, controller) || controller.TroughtWall(enemy)) continue;
 
                 if (requireOnScreen && !IsOnScreen(enemy, cam)) continue;
 
@@ -491,9 +491,12 @@ namespace BlockStoryMod
             Health h = go.GetComponent<Health>();
             if (h == null || h.IsDead()) return false;
 
-            if (FilterNeutralTargets && EldriarNPCDamageProtectionPatch.IsNonAngryNPC(h))
+            if (FilterNeutralTargets)
             {
-                return false;
+                if (go.CompareTag("Animal") || go.CompareTag("NPC"))
+                {
+                    return h.angry;
+                }
             }
 
             return true;
@@ -723,9 +726,9 @@ namespace BlockStoryMod
             Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r5.Contains(mousePos))
             {
-                hoveredDesc = "Increases Eldriar's fireball/meteor range. Melee range is unaffected.";
+                hoveredDesc = "Increases Eldriar's ranged fireball/meteor engagement distance to 35m without affecting his melee bite range.";
             }
-            if (DrawToggleButton(r5, "Increased Projectile Attack Range", EldiriarFixPlugin.EnhancedRange))
+            if (DrawToggleButton(r5, "Increased Attack Range", EldiriarFixPlugin.EnhancedRange))
             {
                 EldiriarFixPlugin.EnhancedRange = !EldiriarFixPlugin.EnhancedRange;
                 PlayerPrefs.SetInt("EldiriarFix_EnhancedRange", EldiriarFixPlugin.EnhancedRange ? 1 : 0);
