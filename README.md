@@ -68,7 +68,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 ---
 * **Unlimited Pets**: A simple mod that removes the 5-pet summon limit.
 ---
-* **Double Doors**:  A simple mod that makes both doors open/close at once at once if one of them opens/closes.
+* **Double Doors**:  A simple mod that makes both doors open/close at once in sync if one of them opens/closes.
 ---
 * **Tool Stacking**: A mod that makes all tools, weapons and armor automatically "stack" and combine durability when picked up and manually in your inventory. Also makes Fuel finally stack in your inventory. Essentially the same way equipable armors can "stack" in vanilla.
   > Configurable using a Keybind menu *(Default: `,` Comma)*
