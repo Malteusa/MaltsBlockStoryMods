@@ -10,7 +10,7 @@ using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.mountedmechattack", "MountedMechAttack", "2.7.0")]
+    [BepInPlugin("com.malts.blockstory.mountedmechattack", "MountedMechAttack", "3.2.0")]
     [BepInDependency(Core.Guid)]
     public class MountedMechAttackPlugin : BaseUnityPlugin
     {
@@ -21,6 +21,8 @@ namespace BlockStoryMod
         public static bool VanillaRockets = PlayerPrefs.GetInt("MountedMechAttack_VanillaRockets", 0) != 0;
         public static bool DestroyBlocks = PlayerPrefs.GetInt("MountedMechAttack_DestroyBlocks", 0) != 0;
         public static bool CleanGhostProjectiles = PlayerPrefs.GetInt("MountedMechAttack_CleanGhostProjectiles", 0) != 0;
+
+        public static bool IsExecutingMechRocketHit = false;
 
         private ISRef _key;
 
@@ -119,10 +121,13 @@ namespace BlockStoryMod
                 mount.rocketModel.SetActive(false);
             }
 
+            Vector3 spawnPos = mount.fireball.spawnPoint != null ? mount.fireball.spawnPoint.position : mount.transform.position + mount.transform.forward * 2.2f + Vector3.up * 1.5f;
+            Quaternion spawnRot = mount.transform.rotation * Quaternion.Euler(-5f, 0f, 0f);
+
             GameObject rocket = Instantiate(
                 mount.fireball.fireBalls[UnityEngine.Random.Range(0, mount.fireball.fireBalls.Length)],
-                mount.fireball.spawnPoint != null ? mount.fireball.spawnPoint.position : mount.transform.position + mount.transform.forward * 2f,
-                mount.transform.rotation
+                spawnPos,
+                spawnRot
             );
 
             InvBaseItem invBaseItem = InvDatabase.FindByName(mount.fireball.itemName ?? "Rockets");
@@ -143,18 +148,15 @@ namespace BlockStoryMod
                 float rotSpeed = VanillaRockets ? mount.fireball.rotationSpeed : 150f;
                 float rocketDmg = mount.fireball.demage;
 
-                homing.InitSettings(
-                    targetTransform,
-                    mount.gameObject,
-                    rocketDmg,
-                    rocketSpeed,
-                    rotSpeed,
-                    mount.fireball.cantHitPlayer,
-                    false,
-                    invBaseItem,
-                    10f,
-                    targetTransform != null
-                );
+                if (targetTransform != null)
+                {
+                    homing.InitSettings(null, mount.gameObject, rocketDmg, rocketSpeed, 0f, true, false, invBaseItem, 10f, false);
+                    StartCoroutine(EnableHomingDelayed(rocket, homing, targetTransform, mount.gameObject, rocketDmg, rocketSpeed, rotSpeed, invBaseItem, delay: 0.4f));
+                }
+                else
+                {
+                    homing.InitSettings(null, mount.gameObject, rocketDmg, rocketSpeed, 0f, true, false, invBaseItem, 10f, false);
+                }
             }
 
             mount.inventory.Consume("Rockets", 0, 1);
@@ -164,6 +166,18 @@ namespace BlockStoryMod
             {
                 mount.rocketModel.SetActive(true);
             }
+        }
+
+        private IEnumerator EnableHomingDelayed(GameObject rocket, Homing homing, Transform targetTransform, GameObject user, float damage, float speed, float rotSpeed, InvBaseItem item, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+
+            if (rocket == null || homing == null || targetTransform == null) yield break;
+
+            Health h = targetTransform.GetComponent<Health>();
+            if (h != null && h.IsDead()) yield break;
+
+            homing.InitSettings(targetTransform, user, damage, speed, rotSpeed, true, false, item, 10f, true);
         }
 
         private GameObject GetBestTarget(GameObject mechGo)
@@ -179,7 +193,7 @@ namespace BlockStoryMod
                 foreach (RaycastHit hit in hits)
                 {
                     GameObject hitGo = hit.collider.gameObject;
-                    if (IsValidTarget(hitGo, mechGo))
+                    if (IsValidTarget(hitGo, mechGo, isDirectAim: true) && IsOnScreen(hitGo, cam))
                     {
                         return hitGo;
                     }
@@ -187,7 +201,7 @@ namespace BlockStoryMod
                     Transform current = hitGo.transform.parent;
                     while (current != null)
                     {
-                        if (IsValidTarget(current.gameObject, mechGo))
+                        if (IsValidTarget(current.gameObject, mechGo, isDirectAim: true) && IsOnScreen(current.gameObject, cam))
                         {
                             return current.gameObject;
                         }
@@ -206,7 +220,7 @@ namespace BlockStoryMod
 
             foreach (GameObject enemy in enemies)
             {
-                if (enemy == null || !IsValidTarget(enemy, mechGo)) continue;
+                if (enemy == null || !IsValidTarget(enemy, mechGo, isDirectAim: false) || !IsOnScreen(enemy, cam)) continue;
 
                 float sqr = (enemy.transform.position - pos).sqrMagnitude;
                 if (sqr < closestSqr)
@@ -219,7 +233,14 @@ namespace BlockStoryMod
             return closest;
         }
 
-        private bool IsValidTarget(GameObject go, GameObject mechGo)
+        private static bool IsOnScreen(GameObject go, Camera cam)
+        {
+            if (go == null || cam == null) return false;
+            Vector3 vp = cam.WorldToViewportPoint(go.transform.position);
+            return vp.z > 0f && vp.x >= 0.05f && vp.x <= 0.95f && vp.y >= 0.05f && vp.y <= 0.95f;
+        }
+
+        private bool IsValidTarget(GameObject go, GameObject mechGo, bool isDirectAim = false)
         {
             if (go == null) return false;
             if (go.CompareTag("Player") || go.CompareTag("Pet")) return false;
@@ -233,7 +254,12 @@ namespace BlockStoryMod
                 return true;
             }
 
-            if (go.CompareTag("Animal") || go.CompareTag("NPC"))
+            if (go.CompareTag("Animal"))
+            {
+                return isDirectAim || h.angry;
+            }
+
+            if (go.CompareTag("NPC"))
             {
                 return h.angry;
             }
@@ -273,6 +299,20 @@ namespace BlockStoryMod
         }
     }
 
+    [HarmonyPatch(typeof(PlayerHealth), "GetAttacked")]
+    public static class PlayerHealth_GetAttacked_Patch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix()
+        {
+            if (MountedMechAttackPlugin.IsExecutingMechRocketHit)
+            {
+                return false;
+            }
+            return true;
+        }
+    }
+
     [HarmonyPatch(typeof(Health), "Attacked")]
     public static class MechNPCDamageProtectionPatch
     {
@@ -281,9 +321,22 @@ namespace BlockStoryMod
         {
             if (__instance == null) return true;
 
+            if (__instance.CompareTag("Player") || __instance.CompareTag("Pet"))
+            {
+                if (MountedMechAttackPlugin.IsExecutingMechRocketHit)
+                {
+                    return false;
+                }
+
+                if (from != null && MountedMechAttackPlugin.IsMech(from.gameObject))
+                {
+                    return false;
+                }
+            }
+
             if (__instance.CompareTag("NPC") && !__instance.angry)
             {
-                if (from != null && MountedMechAttackPlugin.IsMech(from.gameObject))
+                if (MountedMechAttackPlugin.IsExecutingMechRocketHit || (from != null && MountedMechAttackPlugin.IsMech(from.gameObject)))
                 {
                     return false;
                 }
@@ -298,17 +351,21 @@ namespace BlockStoryMod
     {
         private static readonly FieldInfo UserField = typeof(Homing).GetField("user", BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly FieldInfo DamageField = typeof(Homing).GetField("damage", BindingFlags.NonPublic | BindingFlags.Instance);
-        private static readonly FieldInfo CantHitPlayerField = typeof(Homing).GetField("cantHitPlayer", BindingFlags.NonPublic | BindingFlags.Instance);
 
         [HarmonyPrefix]
         public static bool Prefix(Homing __instance)
         {
+            GameObject user = UserField?.GetValue(__instance) as GameObject;
+
+            if (user != null && MountedMechAttackPlugin.IsMech(user))
+            {
+                MountedMechAttackPlugin.IsExecutingMechRocketHit = true;
+            }
+
             if (MountedMechAttackPlugin.DestroyBlocks)
             {
                 return true;
             }
-
-            GameObject user = UserField?.GetValue(__instance) as GameObject;
 
             if (user == null || !MountedMechAttackPlugin.IsMech(user))
             {
@@ -316,7 +373,6 @@ namespace BlockStoryMod
             }
 
             float damage = DamageField != null ? (float)DamageField.GetValue(__instance) : 150f;
-            bool cantHitPlayer = CantHitPlayerField != null && (bool)CantHitPlayerField.GetValue(__instance);
 
             Vector3 epicenter = __instance.transform.position;
             float radius = 4.5f;
@@ -331,7 +387,7 @@ namespace BlockStoryMod
                 if (col == null) continue;
                 GameObject go = col.gameObject;
 
-                if (cantHitPlayer && (go.CompareTag("Player") || go.CompareTag("Pet"))) continue;
+                if (go.CompareTag("Player") || go.CompareTag("Pet")) continue;
                 if (go == user) continue;
 
                 HealthBase health = go.GetComponent<HealthBase>() ?? go.GetComponentInParent<HealthBase>();
@@ -349,6 +405,12 @@ namespace BlockStoryMod
             }
 
             return false;
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix()
+        {
+            MountedMechAttackPlugin.IsExecutingMechRocketHit = false;
         }
     }
 
