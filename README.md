@@ -50,6 +50,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Option to make it shoot when the key is held instead.
   * Increase the speed of the fireballs, can be disabled.
   * Make Onyx shoot fireballs more frequently.
+  * Now shoots 8 fireballs instead of 5.
 ---
 * **Mounted Mech Attack**: A highly configurable mod focuses on firing rockets on the Mech while mounted.
   > All features can be toggled using the in-game mods list config.
