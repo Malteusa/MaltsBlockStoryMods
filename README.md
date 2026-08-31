@@ -38,11 +38,18 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   > All features can be toggled using the in-game mods list config.
   * Shoot Fireballs and Meteors on Right-Click when mounted.
   * Option to make it shoot when the key is held instead. **(Disabled by Default)**
-  * Transform Eldriar into a ranged pet (just like the Mech or Snowman).
+  * Make Eldriar shoot fireballs and meteors more frequently.
   * Make Fireballs and Meteors home in on targets.
   * Make Fireballs and Meteors faster.
   * Protect friendly NPCs from Fireballs/Meteors *(~except the ones in his idle animation...~ Well, sometimes...)*.
   * Projectiles are automatically cleaned up once the enemy dies.
+---
+* **Onyx Tweaks**: A highly configurable mod solely focused on making the Phoenix Pet (Onyx) worthy of an endgame pet.
+  > All features can be toggled using the in-game mods list config.
+  * Shoot Fireballs on Right-Click when mounted.
+  * Option to make it shoot when the key is held instead.
+  * Increase the speed of the fireballs, can be disabled.
+  * Make Onyx shoot fireballs more frequently.
 ---
 * **Mounted Mech Attack**: A highly configurable mod focuses on firing rockets on the Mech while mounted.
   > All features can be toggled using the in-game mods list config.
