@@ -10,7 +10,7 @@ using ISRef = UnityEngine.InputSystem.InputActionReference;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.onyxtweaks", "OnyxTweaks", "2.3.0")]
+    [BepInPlugin("com.malts.blockstory.onyxtweaks", "OnyxTweaks", "2.5.0")]
     [BepInDependency(Core.Guid)]
     public class OnyxFixPlugin : BaseUnityPlugin
     {
@@ -28,7 +28,7 @@ namespace BlockStoryMod
         private ISRef _key;
 
         private float _lastMountedAttackTime = 0f;
-        public float MountedAttackCooldown = 1.8f;
+        public float MountedAttackCooldown = 1.0f;
         private float _aiScanTimer = 0f;
 
         private readonly Dictionary<int, float> _unmountedAttackTimers = new Dictionary<int, float>();
@@ -117,7 +117,7 @@ namespace BlockStoryMod
 
                 TryPlayAnimation(mountedOnyx, "attack");
 
-                List<GameObject> targets = GetHostileTargets(mountedOnyx, maxTargets: 5, maxDist: 40f, requireOnScreen: true);
+                List<GameObject> targets = GetHostileTargets(mountedOnyx, maxTargets: 8, maxDist: 40f, requireOnScreen: true);
 
                 StartCoroutine(LaunchOnyxAbilities(mountedOnyx, targets, isMounted: true));
             }
@@ -152,11 +152,11 @@ namespace BlockStoryMod
                     float dist = Vector3.Distance(controller.transform.position, controller.target.transform.position);
                     float maxCastDist = EnhancedRange ? 35f : 15f;
 
-                    if (dist <= maxCastDist && Time.time >= _unmountedAttackTimers[id] + 3.0f)
+                    if (dist <= maxCastDist && Time.time >= _unmountedAttackTimers[id] + 2.5f)
                     {
                         _unmountedAttackTimers[id] = Time.time;
 
-                        List<GameObject> targets = GetHostileTargets(controller, maxTargets: 5, maxDist: maxCastDist, requireOnScreen: false);
+                        List<GameObject> targets = GetHostileTargets(controller, maxTargets: 8, maxDist: maxCastDist, requireOnScreen: false);
                         StartCoroutine(LaunchOnyxAbilities(controller, targets, isMounted: false));
                     }
                 }
@@ -187,11 +187,12 @@ namespace BlockStoryMod
             float rotSpd = AlternateProjectiles ? 400f : (fireballSettings.rotationSpeed > 0f ? fireballSettings.rotationSpeed : 12f);
 
             int targetCount = targets != null ? targets.Count : 0;
-            int count = fireballSettings.fireballs.Length;
+            int baseCount = fireballSettings.fireballs.Length;
+            int totalFireballs = 8;
 
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < totalFireballs; i++)
             {
-                var fbData = fireballSettings.fireballs[i];
+                var fbData = fireballSettings.fireballs[i % baseCount];
                 if (fbData.fireBall == null) continue;
 
                 GameObject assignedTarget = targetCount > 0 ? targets[i % targetCount] : null;
@@ -204,7 +205,9 @@ namespace BlockStoryMod
                 Transform targetTransform = assignedTarget != null ? assignedTarget.transform : null;
                 Health targetHealth = assignedTarget != null ? assignedTarget.GetComponent<Health>() : null;
 
-                Vector3 spawnPos = fbData.spawnPoint != null ? fbData.spawnPoint.position : controller.transform.position + Quaternion.Euler(0f, i * 90f, 0f) * Vector3.forward * 2f;
+                float angle = i * (360f / totalFireballs);
+                Vector3 circleOffset = Quaternion.Euler(0f, angle, 0f) * Vector3.forward * 2.2f;
+                Vector3 spawnPos = controller.transform.position + circleOffset + Vector3.up * 1.0f;
                 Quaternion spawnRot = controller.transform.rotation;
 
                 GameObject fb = Instantiate(fbData.fireBall, spawnPos, spawnRot);
@@ -414,10 +417,14 @@ namespace BlockStoryMod
         {
             if (!OnyxFixPlugin.AlternateProjectiles) return;
 
-            if (user != null && OnyxFixPlugin.IsOnyx(user.GetComponent<BehaviourController>()))
+            if (user != null)
             {
-                speed = 45f;
-                rotationSpeed = 400f;
+                BehaviourController c = user.GetComponent<BehaviourController>();
+                if (c != null && OnyxFixPlugin.IsOnyx(c))
+                {
+                    speed = 45f;
+                    rotationSpeed = 400f;
+                }
             }
         }
     }
@@ -593,7 +600,7 @@ namespace BlockStoryMod
             Rect r3 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r3.Contains(mousePos))
             {
-                hoveredDesc = "Tweaks Onyx's AI so he automatically shoots Fireballs every 3 seconds in combat when dismounted.";
+                hoveredDesc = "Tweaks Onyx's AI so he automatically shoots Fireball barrages every 3 seconds in combat when dismounted.";
             }
             if (DrawToggleButton(r3, "AI Tweaks", OnyxFixPlugin.UnmountedAIBoost))
             {
@@ -607,9 +614,9 @@ namespace BlockStoryMod
             Rect r4 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r4.Contains(mousePos))
             {
-                hoveredDesc = "Increases Onyx's fireball detection range.";
+                hoveredDesc = "Increases Onyx's fireball range.";
             }
-            if (DrawToggleButton(r4, "Increased Projectile Detection Range", OnyxFixPlugin.EnhancedRange))
+            if (DrawToggleButton(r4, "Increased Projectile Attack Range", OnyxFixPlugin.EnhancedRange))
             {
                 OnyxFixPlugin.EnhancedRange = !OnyxFixPlugin.EnhancedRange;
                 PlayerPrefs.SetInt("OnyxFix_EnhancedRange", OnyxFixPlugin.EnhancedRange ? 1 : 0);
