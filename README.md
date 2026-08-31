@@ -17,7 +17,7 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 
 > *Please check key mappings in-game or use BSMK's "Check hotkey conflicts" to find any possible conflicts with other mods*
 
-> ***NOTE:** `Eldriar Tweaks` and `Mounted Mech Attack` will show a keybind conflict but it can be ignored, since they don't actually conflict during gameplay.*
+> ***NOTE:** `Eldriar Tweaks`, `Onyx Tweaks` and `Mounted Mech Attack` will show a keybind conflict but it can be ignored, since they don't actually conflict during gameplay.*
 
 ## Modlist
 
