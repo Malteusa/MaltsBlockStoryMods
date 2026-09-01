@@ -9,7 +9,7 @@ using BlockStoryCore;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "2.2.0")]
+    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "3.0.0")]
     [BepInDependency(Core.Guid)]
     public class MatiFixPlugin : BaseUnityPlugin
     {
@@ -19,13 +19,16 @@ namespace BlockStoryMod
         public static bool UnmountedAIBoost = PlayerPrefs.GetInt("MatiFix_UnmountedAIBoost", 1) != 0;
         public static bool WallSensing = PlayerPrefs.GetInt("MatiFix_WallSensing", 1) != 0;
         public static bool EnhancedRange = PlayerPrefs.GetInt("MatiFix_EnhancedRange", 1) != 0;
-        public static bool DarkDamage = PlayerPrefs.GetInt("MatiFix_DarkDamage", 1) != 0;
+        public static bool LingeringDarkDamage = PlayerPrefs.GetInt("MatiFix_LingeringDarkDamage", 1) != 0;
+        public static bool TeleportDelay = PlayerPrefs.GetInt("MatiFix_TeleportDelay", 1) != 0;
 
         private float _aiScanTimer = 0f;
         private readonly Dictionary<int, float> _attackTimers = new Dictionary<int, float>();
 
         private static readonly FieldInfo BlastEffectField = typeof(BehaviourController).GetField("blastEffect", BindingFlags.Public | BindingFlags.Instance);
         private static readonly FieldInfo EffectOffsetField = typeof(BehaviourController).GetField("effectOffset", BindingFlags.Public | BindingFlags.Instance);
+        private static readonly FieldInfo AnimField = typeof(BehaviourController).GetField("animation", BindingFlags.Public | BindingFlags.Instance);
+        private static MethodInfo _crossFadeMethod;
 
         private void Awake()
         {
@@ -111,7 +114,7 @@ namespace BlockStoryMod
                     float dist = Vector3.Distance(controller.transform.position, target.transform.position);
                     float maxCastDist = EnhancedRange ? 60f : 30f;
 
-                    if (dist <= maxCastDist && Time.time >= _attackTimers[id] + 1.0f)
+                    if (dist <= maxCastDist && Time.time >= _attackTimers[id] + 1.2f)
                     {
                         _attackTimers[id] = Time.time;
                         StartCoroutine(ExecuteTeleportCombo(controller, target));
@@ -135,11 +138,14 @@ namespace BlockStoryMod
             controller.transform.position = targetPos;
             controller.SpawnTeleportEffect();
 
+            TryPlayAnimation(controller, "attack");
+
             yield return new WaitForSeconds(0.05f);
 
             ExecuteFixedMagicBlast(controller);
 
-            yield return new WaitForSeconds(0.35f);
+            float delay = TeleportDelay ? 1.0f : 0.35f;
+            yield return new WaitForSeconds(delay);
 
             if (controller != null && controller.player != null)
             {
@@ -173,7 +179,7 @@ namespace BlockStoryMod
             HashSet<GameObject> processed = new HashSet<GameObject>();
 
             HealthBase userHealth = controller.GetComponent<HealthBase>();
-            InvEffect.Identifier damageType = DarkDamage ? (InvEffect.Identifier)6 : InvEffect.Identifier.NormalDamage;
+            GameObject darkFxPrefab = GetDarkDamageParticlePrefab();
 
             foreach (Collider col in colliders)
             {
@@ -203,8 +209,32 @@ namespace BlockStoryMod
                 float falloff = Mathf.Clamp01(1f - (dist / radius));
                 float finalDamage = -Mathf.Max(25f, baseDamage * falloff);
 
-                health.Attacked(finalDamage, userHealth, null, damageType, false);
+                health.Attacked(finalDamage, userHealth, null, InvEffect.Identifier.NormalDamage, false);
+
+                if (LingeringDarkDamage)
+                {
+                    DarkDoTTracker tracker = rootGo.GetComponent<DarkDoTTracker>();
+                    if (tracker == null)
+                    {
+                        tracker = rootGo.AddComponent<DarkDoTTracker>();
+                    }
+                    tracker.Init(userHealth, darkFxPrefab);
+                }
             }
+        }
+
+        private static GameObject GetDarkDamageParticlePrefab()
+        {
+            GameObject managerGo = GameObject.FindGameObjectWithTag("MOBManager");
+            if (managerGo != null)
+            {
+                MOBManagement manager = managerGo.GetComponent<MOBManagement>();
+                if (manager != null)
+                {
+                    return manager.darkDamagePrefab;
+                }
+            }
+            return null;
         }
 
         public static bool IsNonAngryNPC(Health h)
@@ -270,6 +300,23 @@ namespace BlockStoryMod
             return true;
         }
 
+        private static void TryPlayAnimation(BehaviourController controller, string animName)
+        {
+            try
+            {
+                object animObj = AnimField?.GetValue(controller);
+                if (animObj != null)
+                {
+                    if (_crossFadeMethod == null)
+                    {
+                        _crossFadeMethod = animObj.GetType().GetMethod("CrossFade", new Type[] { typeof(string), typeof(float) });
+                    }
+                    _crossFadeMethod?.Invoke(animObj, new object[] { animName, 0.2f });
+                }
+            }
+            catch { }
+        }
+
         public static bool IsMati(BehaviourController controller)
         {
             if (controller == null) return false;
@@ -285,6 +332,59 @@ namespace BlockStoryMod
             bool treeMatches = !string.IsNullOrEmpty(controller.tree) && controller.tree.IndexOf("MATI", StringComparison.OrdinalIgnoreCase) >= 0;
 
             return nameMatches || treeMatches;
+        }
+    }
+
+    public class DarkDoTTracker : MonoBehaviour
+    {
+        private float _durationRemaining = 30f;
+        private float _tickTimer = 0f;
+        private HealthBase _health;
+        private HealthBase _userHealth;
+        private GameObject _activeVisual;
+
+        public void Init(HealthBase userHealth, GameObject darkFxPrefab)
+        {
+            _userHealth = userHealth;
+            _health = GetComponent<HealthBase>();
+            _durationRemaining = 30f;
+
+            if (_activeVisual == null && darkFxPrefab != null)
+            {
+                Vector3 fxPos = transform.position + Vector3.up * 1.5f;
+                _activeVisual = Instantiate(darkFxPrefab, fxPos, Quaternion.identity);
+                _activeVisual.name = "MatiDarkDoTVisual";
+                _activeVisual.transform.parent = transform;
+            }
+        }
+
+        private void Update()
+        {
+            if (Inventory.isPaused) return;
+
+            if (_health == null || _health.IsDead() || _durationRemaining <= 0f)
+            {
+                CleanupAndDestroy();
+                return;
+            }
+
+            _durationRemaining -= Time.deltaTime;
+            _tickTimer += Time.deltaTime;
+
+            if (_tickTimer >= 1.0f)
+            {
+                _tickTimer = 0f;
+                _health.Attacked(-10f, _userHealth, null, (InvEffect.Identifier)6, false);
+            }
+        }
+
+        private void CleanupAndDestroy()
+        {
+            if (_activeVisual != null)
+            {
+                Destroy(_activeVisual);
+            }
+            Destroy(this);
         }
     }
 
@@ -420,7 +520,7 @@ namespace BlockStoryMod
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _dim);
 
             float width = Mathf.Min(570f, Screen.width * 0.82f);
-            float height = Mathf.Min(480f, Screen.height * 0.85f);
+            float height = Mathf.Min(520f, Screen.height * 0.88f);
             float x = (Screen.width - width) / 2f;
             float y = (Screen.height - height) / 2f;
 
@@ -480,16 +580,30 @@ namespace BlockStoryMod
             Rect r4 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r4.Contains(mousePos))
             {
-                hoveredDesc = "When enabled, Mati's attack deals Dark damage.";
+                hoveredDesc = "Adds a 10 Dark Damage over 30 seconds effect to Mati's attack.";
             }
-            if (DrawToggleButton(r4, "Dark Magic Damage", MatiFixPlugin.DarkDamage))
+            if (DrawToggleButton(r4, "Dark Damage Overtime", MatiFixPlugin.LingeringDarkDamage))
             {
-                MatiFixPlugin.DarkDamage = !MatiFixPlugin.DarkDamage;
-                PlayerPrefs.SetInt("MatiFix_DarkDamage", MatiFixPlugin.DarkDamage ? 1 : 0);
+                MatiFixPlugin.LingeringDarkDamage = !MatiFixPlugin.LingeringDarkDamage;
+                PlayerPrefs.SetInt("MatiFix_LingeringDarkDamage", MatiFixPlugin.LingeringDarkDamage ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
-            float descY = y + 195f;
+            contentY += btnSpacing;
+
+            Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r5.Contains(mousePos))
+            {
+                hoveredDesc = "Adds a ~1 second delay after teleporting onto an enemy before teleporting back.";
+            }
+            if (DrawToggleButton(r5, "Teleport Attack Delay", MatiFixPlugin.TeleportDelay, enabled: MatiFixPlugin.UnmountedAIBoost))
+            {
+                MatiFixPlugin.TeleportDelay = !MatiFixPlugin.TeleportDelay;
+                PlayerPrefs.SetInt("MatiFix_TeleportDelay", MatiFixPlugin.TeleportDelay ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+
+            float descY = y + 230f;
             float descHeight = 160f;
             GUI.Label(new Rect(x + 24f, descY, contentWidth, descHeight), hoveredDesc, _desc);
 
