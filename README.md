@@ -52,6 +52,13 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
   * Make Onyx shoot fireballs more frequently.
   * Now shoots 8 fireballs instead of 5.
 ---
+* **Mati Tweaks**: Yet another highly configurable mod solely focused on making the Mati Pet not utter trash.
+  > All features can be toggled using the in-game mods list config.
+  * Completely overhauls attack AI, now teleports directly onto enemies and quickly teleports back to safety.
+  * Can now attack and detect enemies through blocks.
+  * Greatly increases detection range.
+  * Option to make it deal dark damage.
+---
 * **Mounted Mech Attack**: A highly configurable mod focuses on firing rockets on the Mech while mounted.
   > All features can be toggled using the in-game mods list config.
   * Fire rockets on Right-Click when mounted, as long as you have rockets in the Mech's inventory.
