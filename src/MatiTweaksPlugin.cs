@@ -9,7 +9,7 @@ using BlockStoryCore;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "3.0.0")]
+    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "4.1.0")]
     [BepInDependency(Core.Guid)]
     public class MatiFixPlugin : BaseUnityPlugin
     {
@@ -19,11 +19,17 @@ namespace BlockStoryMod
         public static bool UnmountedAIBoost = PlayerPrefs.GetInt("MatiFix_UnmountedAIBoost", 1) != 0;
         public static bool WallSensing = PlayerPrefs.GetInt("MatiFix_WallSensing", 1) != 0;
         public static bool EnhancedRange = PlayerPrefs.GetInt("MatiFix_EnhancedRange", 1) != 0;
+        public static bool PrioritizeHighHealth = PlayerPrefs.GetInt("MatiFix_PrioritizeHighHealth", 1) != 0;
         public static bool LingeringDarkDamage = PlayerPrefs.GetInt("MatiFix_LingeringDarkDamage", 1) != 0;
         public static bool TeleportDelay = PlayerPrefs.GetInt("MatiFix_TeleportDelay", 1) != 0;
 
+        public static float TeleportAttackCooldown = PlayerPrefs.GetFloat("MatiFix_TeleportAttackCooldown", 3.0f);
+        public static float DoTDamage = PlayerPrefs.GetFloat("MatiFix_DoTDamage", 10.0f);
+        public static float DoTDuration = PlayerPrefs.GetFloat("MatiFix_DoTDuration", 30.0f);
+
         private float _aiScanTimer = 0f;
         private readonly Dictionary<int, float> _attackTimers = new Dictionary<int, float>();
+        private readonly HashSet<int> _activeTeleports = new HashSet<int>();
 
         private static readonly FieldInfo BlastEffectField = typeof(BehaviourController).GetField("blastEffect", BindingFlags.Public | BindingFlags.Instance);
         private static readonly FieldInfo EffectOffsetField = typeof(BehaviourController).GetField("effectOffset", BindingFlags.Public | BindingFlags.Instance);
@@ -79,7 +85,7 @@ namespace BlockStoryMod
 
         private void Update()
         {
-            if (!Enabled) return;
+            if (!Enabled || IsGamePaused()) return;
 
             _aiScanTimer += Time.deltaTime;
             if (_aiScanTimer >= 0.25f)
@@ -91,6 +97,8 @@ namespace BlockStoryMod
 
         private void FixMatiAI()
         {
+            if (IsGamePaused()) return;
+
 #pragma warning disable CS0618
             BehaviourController[] controllers = UnityEngine.Object.FindObjectsOfType<BehaviourController>();
 #pragma warning restore CS0618
@@ -102,6 +110,9 @@ namespace BlockStoryMod
                 if (!UnmountedAIBoost) continue;
 
                 int id = controller.GetInstanceID();
+
+                if (_activeTeleports.Contains(id)) continue;
+
                 if (!_attackTimers.ContainsKey(id))
                 {
                     _attackTimers[id] = Time.time;
@@ -109,15 +120,14 @@ namespace BlockStoryMod
 
                 GameObject target = GetMatiTarget(controller);
 
-                if (target != null && !Inventory.isPaused)
+                if (target != null && !IsGamePaused())
                 {
                     float dist = Vector3.Distance(controller.transform.position, target.transform.position);
                     float maxCastDist = EnhancedRange ? 60f : 30f;
 
-                    if (dist <= maxCastDist && Time.time >= _attackTimers[id] + 1.2f)
+                    if (dist <= maxCastDist && Time.time >= _attackTimers[id] + TeleportAttackCooldown)
                     {
-                        _attackTimers[id] = Time.time;
-                        StartCoroutine(ExecuteTeleportCombo(controller, target));
+                        StartCoroutine(ExecuteTeleportCombo(controller, target, id));
                     }
                 }
             }
@@ -128,38 +138,52 @@ namespace BlockStoryMod
             }
         }
 
-        private IEnumerator ExecuteTeleportCombo(BehaviourController controller, GameObject target)
+        private IEnumerator ExecuteTeleportCombo(BehaviourController controller, GameObject target, int id)
         {
-            if (controller == null || target == null) yield break;
+            if (controller == null || target == null || IsGamePaused()) yield break;
 
-            controller.SpawnTeleportEffect();
+            _activeTeleports.Add(id);
 
-            Vector3 targetPos = target.transform.position + Vector3.up * 1.2f + UnityEngine.Random.insideUnitSphere * 1.5f;
-            controller.transform.position = targetPos;
-            controller.SpawnTeleportEffect();
-
-            TryPlayAnimation(controller, "attack");
-
-            yield return new WaitForSeconds(0.05f);
-
-            ExecuteFixedMagicBlast(controller);
-
-            float delay = TeleportDelay ? 1.0f : 0.35f;
-            yield return new WaitForSeconds(delay);
-
-            if (controller != null && controller.player != null)
+            try
             {
                 controller.SpawnTeleportEffect();
-                Vector3 safePos = controller.player.transform.position + UnityEngine.Random.onUnitSphere * 4f;
-                safePos.y = controller.player.transform.position.y + 1.5f;
-                controller.transform.position = safePos;
+
+                Vector3 targetPos = target.transform.position + Vector3.up * 1.2f + UnityEngine.Random.insideUnitSphere * 1.5f;
+                controller.transform.position = targetPos;
                 controller.SpawnTeleportEffect();
+
+                TryPlayAnimation(controller, "attack");
+
+                yield return new WaitForSeconds(0.15f);
+
+                if (IsGamePaused()) yield break;
+
+                ExecuteFixedMagicBlast(controller);
+
+                float delay = TeleportDelay ? 1.0f : 0.35f;
+                yield return new WaitForSeconds(delay);
+
+                if (IsGamePaused()) yield break;
+
+                if (controller != null && controller.player != null)
+                {
+                    controller.SpawnTeleportEffect();
+                    Vector3 safePos = controller.player.transform.position + UnityEngine.Random.onUnitSphere * 4f;
+                    safePos.y = controller.player.transform.position.y + 1.5f;
+                    controller.transform.position = safePos;
+                    controller.SpawnTeleportEffect();
+                }
+            }
+            finally
+            {
+                _activeTeleports.Remove(id);
+                _attackTimers[id] = Time.time;
             }
         }
 
         public static void ExecuteFixedMagicBlast(BehaviourController controller)
         {
-            if (controller == null) return;
+            if (controller == null || IsGamePaused()) return;
 
             GameObject blastFx = BlastEffectField?.GetValue(controller) as GameObject;
             float offset = EffectOffsetField != null ? (float)EffectOffsetField.GetValue(controller) : 0f;
@@ -218,9 +242,16 @@ namespace BlockStoryMod
                     {
                         tracker = rootGo.AddComponent<DarkDoTTracker>();
                     }
-                    tracker.Init(userHealth, darkFxPrefab);
+                    tracker.Init(userHealth, darkFxPrefab, DoTDamage, DoTDuration);
                 }
             }
+        }
+
+        public static bool IsGamePaused()
+        {
+            if (Inventory.isPaused) return true;
+            if (Inventory.Instance != null && Inventory.Instance.isWindowOpen()) return true;
+            return false;
         }
 
         private static GameObject GetDarkDamageParticlePrefab()
@@ -247,38 +278,61 @@ namespace BlockStoryMod
         {
             if (controller == null) return null;
 
-            if (controller.target != null && IsHostileTarget(controller.target))
-            {
-                return controller.target;
-            }
-
             Vector3 pos = controller.transform.position;
             float maxDist = EnhancedRange ? 60f : 30f;
-            float closestSqr = maxDist * maxDist;
-            GameObject closest = null;
+            float sqrMax = maxDist * maxDist;
 
 #pragma warning disable CS0618
             GameObject[] enemies = GameObject.FindGameObjectsWithTag("Enemy");
 #pragma warning restore CS0618
+
+            GameObject bestTarget = null;
+            float highestMaxHealth = -1f;
+            float closestSqrForHighest = float.MaxValue;
 
             foreach (GameObject enemy in enemies)
             {
                 if (enemy == null || !IsHostileTarget(enemy)) continue;
 
                 float sqr = (enemy.transform.position - pos).sqrMagnitude;
-                if (sqr < closestSqr)
+                if (sqr > sqrMax) continue;
+
+                Health h = enemy.GetComponent<Health>();
+                if (h == null || h.IsDead()) continue;
+
+                if (PrioritizeHighHealth)
                 {
-                    closestSqr = sqr;
-                    closest = enemy;
+                    if (h.maxHealth > highestMaxHealth)
+                    {
+                        highestMaxHealth = h.maxHealth;
+                        closestSqrForHighest = sqr;
+                        bestTarget = enemy;
+                    }
+                    else if (Mathf.Approximately(h.maxHealth, highestMaxHealth))
+                    {
+                        if (sqr < closestSqrForHighest)
+                        {
+                            closestSqrForHighest = sqr;
+                            bestTarget = enemy;
+                        }
+                    }
+                }
+                else
+                {
+                    if (sqr < closestSqrForHighest)
+                    {
+                        closestSqrForHighest = sqr;
+                        bestTarget = enemy;
+                    }
                 }
             }
 
-            if (closest != null)
+            if (bestTarget != null)
             {
-                controller.target = closest;
+                controller.target = bestTarget;
             }
 
-            return closest;
+            return bestTarget;
         }
 
         private bool IsHostileTarget(GameObject go)
@@ -342,17 +396,26 @@ namespace BlockStoryMod
         private HealthBase _health;
         private HealthBase _userHealth;
         private GameObject _activeVisual;
+        private GameObject _fxPrefab;
+        private float _damagePerSecond = 10f;
 
-        public void Init(HealthBase userHealth, GameObject darkFxPrefab)
+        public void Init(HealthBase userHealth, GameObject darkFxPrefab, float damagePerSecond, float duration)
         {
             _userHealth = userHealth;
             _health = GetComponent<HealthBase>();
-            _durationRemaining = 30f;
+            _durationRemaining = duration;
+            _damagePerSecond = damagePerSecond;
+            _fxPrefab = darkFxPrefab;
 
-            if (_activeVisual == null && darkFxPrefab != null)
+            EnsureVisual();
+        }
+
+        private void EnsureVisual()
+        {
+            if (_activeVisual == null && _fxPrefab != null && transform != null)
             {
                 Vector3 fxPos = transform.position + Vector3.up * 1.5f;
-                _activeVisual = Instantiate(darkFxPrefab, fxPos, Quaternion.identity);
+                _activeVisual = Instantiate(_fxPrefab, fxPos, Quaternion.identity);
                 _activeVisual.name = "MatiDarkDoTVisual";
                 _activeVisual.transform.parent = transform;
             }
@@ -360,7 +423,7 @@ namespace BlockStoryMod
 
         private void Update()
         {
-            if (Inventory.isPaused) return;
+            if (MatiFixPlugin.IsGamePaused()) return;
 
             if (_health == null || _health.IsDead() || _durationRemaining <= 0f)
             {
@@ -371,10 +434,12 @@ namespace BlockStoryMod
             _durationRemaining -= Time.deltaTime;
             _tickTimer += Time.deltaTime;
 
+            EnsureVisual();
+
             if (_tickTimer >= 1.0f)
             {
                 _tickTimer = 0f;
-                _health.Attacked(-10f, _userHealth, null, (InvEffect.Identifier)6, false);
+                _health.Attacked(-_damagePerSecond, _userHealth, null, (InvEffect.Identifier)6, false);
             }
         }
 
@@ -446,6 +511,7 @@ namespace BlockStoryMod
 
         private static GUIStyle _title;
         private static GUIStyle _row;
+        private static GUIStyle _rowText;
         private static GUIStyle _back;
         private static GUIStyle _desc;
 
@@ -484,6 +550,13 @@ namespace BlockStoryMod
                 alignment = TextAnchor.MiddleCenter,
                 normal = { textColor = Color.white }
             };
+            _rowText = new GUIStyle(Theme.LabelGold)
+            {
+                fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleLeft,
+                normal = { textColor = Color.white }
+            };
             _back = new GUIStyle(Theme.Button)
             {
                 fontSize = 18,
@@ -519,8 +592,8 @@ namespace BlockStoryMod
 
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _dim);
 
-            float width = Mathf.Min(570f, Screen.width * 0.82f);
-            float height = Mathf.Min(520f, Screen.height * 0.88f);
+            float width = Mathf.Min(580f, Screen.width * 0.85f);
+            float height = Mathf.Min(670f, Screen.height * 0.96f);
             float x = (Screen.width - width) / 2f;
             float y = (Screen.height - height) / 2f;
 
@@ -529,8 +602,8 @@ namespace BlockStoryMod
 
             float contentY = y + 44f;
             float contentWidth = width - 48f;
-            float btnHeight = 30f;
-            float btnSpacing = 34f;
+            float btnHeight = 28f;
+            float btnSpacing = 31f;
 
             string hoveredDesc = "Hover over any option to see what it does.";
             Vector2 mousePos = Event.current.mousePosition;
@@ -552,9 +625,34 @@ namespace BlockStoryMod
             Rect r2 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r2.Contains(mousePos))
             {
+                hoveredDesc = "Adds a configurable delay after teleporting onto an enemy before teleporting back.";
+            }
+            if (DrawToggleButton(r2, "Teleport Attack Delay", MatiFixPlugin.TeleportDelay, enabled: MatiFixPlugin.UnmountedAIBoost))
+            {
+                MatiFixPlugin.TeleportDelay = !MatiFixPlugin.TeleportDelay;
+                PlayerPrefs.SetInt("MatiFix_TeleportDelay", MatiFixPlugin.TeleportDelay ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+
+            contentY += btnSpacing;
+
+            bool cooldownEnabled = MatiFixPlugin.UnmountedAIBoost && MatiFixPlugin.TeleportDelay;
+            Rect r3 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r3.Contains(mousePos))
+            {
+                hoveredDesc = "Adjusts the delay in seconds between Mati's teleport attacks.";
+            }
+            MatiFixPlugin.TeleportAttackCooldown = DrawSlider(r3, "Teleport Cooldown", MatiFixPlugin.TeleportAttackCooldown, 1f, 10f, "s", step: 0.5f, enabled: cooldownEnabled);
+            PlayerPrefs.SetFloat("MatiFix_TeleportAttackCooldown", MatiFixPlugin.TeleportAttackCooldown);
+
+            contentY += btnSpacing;
+
+            Rect r4 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r4.Contains(mousePos))
+            {
                 hoveredDesc = "Allows Mati to detect and hunt enemies through blocks.";
             }
-            if (DrawToggleButton(r2, "Target Through Walls", MatiFixPlugin.WallSensing))
+            if (DrawToggleButton(r4, "Target Through Walls", MatiFixPlugin.WallSensing))
             {
                 MatiFixPlugin.WallSensing = !MatiFixPlugin.WallSensing;
                 PlayerPrefs.SetInt("MatiFix_WallSensing", MatiFixPlugin.WallSensing ? 1 : 0);
@@ -563,12 +661,12 @@ namespace BlockStoryMod
 
             contentY += btnSpacing;
 
-            Rect r3 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
-            if (r3.Contains(mousePos))
+            Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r5.Contains(mousePos))
             {
-                hoveredDesc = "Increases Mati's attack radius and expands the teleport range greatly.";
+                hoveredDesc = "Increases Mati's attack radius and expands the teleport range greatly. Disable this if you don't want random animals dying.";
             }
-            if (DrawToggleButton(r3, "Increased Attack & Detection Range", MatiFixPlugin.EnhancedRange))
+            if (DrawToggleButton(r5, "Increased Attack & Detection Range", MatiFixPlugin.EnhancedRange))
             {
                 MatiFixPlugin.EnhancedRange = !MatiFixPlugin.EnhancedRange;
                 PlayerPrefs.SetInt("MatiFix_EnhancedRange", MatiFixPlugin.EnhancedRange ? 1 : 0);
@@ -577,12 +675,26 @@ namespace BlockStoryMod
 
             contentY += btnSpacing;
 
-            Rect r4 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
-            if (r4.Contains(mousePos))
+            Rect r6 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r6.Contains(mousePos))
             {
-                hoveredDesc = "Adds a 10 Dark Damage over 30 seconds effect to Mati's attack.";
+                hoveredDesc = "Makes Mati prioritize targeting bosses and high health enemies.";
             }
-            if (DrawToggleButton(r4, "Dark Damage Overtime", MatiFixPlugin.LingeringDarkDamage))
+            if (DrawToggleButton(r6, "Boss & High Health Priority", MatiFixPlugin.PrioritizeHighHealth))
+            {
+                MatiFixPlugin.PrioritizeHighHealth = !MatiFixPlugin.PrioritizeHighHealth;
+                PlayerPrefs.SetInt("MatiFix_PrioritizeHighHealth", MatiFixPlugin.PrioritizeHighHealth ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+
+            contentY += btnSpacing;
+
+            Rect r7 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r7.Contains(mousePos))
+            {
+                hoveredDesc = "Adds overtime dark damage on enemies hit by Mati's attack.";
+            }
+            if (DrawToggleButton(r7, "Dark Damage Overtime", MatiFixPlugin.LingeringDarkDamage))
             {
                 MatiFixPlugin.LingeringDarkDamage = !MatiFixPlugin.LingeringDarkDamage;
                 PlayerPrefs.SetInt("MatiFix_LingeringDarkDamage", MatiFixPlugin.LingeringDarkDamage ? 1 : 0);
@@ -591,19 +703,27 @@ namespace BlockStoryMod
 
             contentY += btnSpacing;
 
-            Rect r5 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
-            if (r5.Contains(mousePos))
+            Rect r8 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r8.Contains(mousePos))
             {
-                hoveredDesc = "Adds a ~1 second delay after teleporting onto an enemy before teleporting back.";
+                hoveredDesc = "Adjusts the damage dealt per second by the dark damage.";
             }
-            if (DrawToggleButton(r5, "Teleport Attack Delay", MatiFixPlugin.TeleportDelay, enabled: MatiFixPlugin.UnmountedAIBoost))
-            {
-                MatiFixPlugin.TeleportDelay = !MatiFixPlugin.TeleportDelay;
-                PlayerPrefs.SetInt("MatiFix_TeleportDelay", MatiFixPlugin.TeleportDelay ? 1 : 0);
-                PlayerPrefs.Save();
-            }
+            MatiFixPlugin.DoTDamage = DrawSlider(r8, "Damage / sec", MatiFixPlugin.DoTDamage, 1f, 100f, " Damage", step: 1.0f, enabled: MatiFixPlugin.LingeringDarkDamage);
+            PlayerPrefs.SetFloat("MatiFix_DoTDamage", MatiFixPlugin.DoTDamage);
 
-            float descY = y + 230f;
+            contentY += btnSpacing;
+
+            Rect r9 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r9.Contains(mousePos))
+            {
+                hoveredDesc = "Adjusts how many seconds the dark damage lasts.";
+            }
+            MatiFixPlugin.DoTDuration = DrawSlider(r9, "Duration", MatiFixPlugin.DoTDuration, 5f, 60f, "s", step: 0.5f, enabled: MatiFixPlugin.LingeringDarkDamage);
+            PlayerPrefs.SetFloat("MatiFix_DoTDuration", MatiFixPlugin.DoTDuration);
+
+            PlayerPrefs.Save();
+
+            float descY = y + 335f;
             float descHeight = 160f;
             GUI.Label(new Rect(x + 24f, descY, contentWidth, descHeight), hoveredDesc, _desc);
 
@@ -632,6 +752,20 @@ namespace BlockStoryMod
             GUI.enabled = prevEnabled;
 
             return clicked;
+        }
+
+        private static float DrawSlider(Rect rect, string label, float value, float min, float max, string unit, float step = 0.5f, bool enabled = true)
+        {
+            bool prevEnabled = GUI.enabled;
+            GUI.enabled = enabled;
+
+            GUI.Label(new Rect(rect.x, rect.y, rect.width * 0.58f, rect.height), label + ": " + value.ToString(step >= 1.0f ? "F0" : "F1") + unit, _rowText);
+            float val = GUI.HorizontalSlider(new Rect(rect.x + rect.width * 0.60f, rect.y + 6f, rect.width * 0.40f, rect.height - 12f), value, min, max);
+
+            float rounded = Mathf.Round(val / step) * step;
+
+            GUI.enabled = prevEnabled;
+            return rounded;
         }
     }
 }
