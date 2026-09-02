@@ -55,9 +55,10 @@ A collection of simple Quality of Life (QoL) and gameplay tweak mods for Block S
 * **Mati Tweaks**: Yet another highly configurable mod solely focused on making the Mati Pet not utter trash.
   > All features can be toggled using the in-game mods list config.
   * Completely overhauls attack AI, now teleports directly onto enemies and quickly teleports back to safety.
+  * Configurable teleport delay.
   * Can now attack and detect enemies through blocks.
   * Greatly increases detection range.
-  * Now deals 10 Dark Damage for 30 seconds on attack.
+  * Now deals 10 Dark Damage for 30 seconds on attack. (Configurable)
 ---
 * **Mounted Mech Attack**: A highly configurable mod focuses on firing rockets on the Mech while mounted.
   > All features can be toggled using the in-game mods list config.
