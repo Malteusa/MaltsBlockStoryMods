@@ -3,18 +3,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
-using HarmonyLib;
 using UnityEngine;
 using BlockStoryCore;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "4.1.0")]
+    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "5.0.0")]
     [BepInDependency(Core.Guid)]
     public class MatiFixPlugin : BaseUnityPlugin
     {
-        private Harmony _harmony;
-
         public static bool Enabled = PlayerPrefs.GetInt("MatiFix_Enabled", 1) != 0;
         public static bool UnmountedAIBoost = PlayerPrefs.GetInt("MatiFix_UnmountedAIBoost", 1) != 0;
         public static bool WallSensing = PlayerPrefs.GetInt("MatiFix_WallSensing", 1) != 0;
@@ -38,9 +35,6 @@ namespace BlockStoryMod
 
         private void Awake()
         {
-            _harmony = new Harmony("com.malts.blockstory.matitweaks");
-            _harmony.PatchAll();
-
             ModInfo modInfo = new ModInfo
             {
                 Name = "Mati Tweaks",
@@ -71,11 +65,6 @@ namespace BlockStoryMod
 
             ModRegistry.Register(modInfo);
             Core.Log?.LogInfo("[MatiTweaks]: Loaded successfully.");
-        }
-
-        private void OnDestroy()
-        {
-            _harmony?.UnpatchSelf();
         }
 
         private void OnGUI()
@@ -450,54 +439,6 @@ namespace BlockStoryMod
                 Destroy(_activeVisual);
             }
             Destroy(this);
-        }
-    }
-
-    [HarmonyPatch(typeof(BehaviourController), "MagicBlast")]
-    public static class MatiVanillaMagicBlastPatch
-    {
-        [HarmonyPrefix]
-        public static bool Prefix(BehaviourController __instance, bool cantHitPlayer)
-        {
-            if (MatiFixPlugin.IsMati(__instance))
-            {
-                MatiFixPlugin.ExecuteFixedMagicBlast(__instance);
-                return false;
-            }
-            return true;
-        }
-    }
-
-    [HarmonyPatch(typeof(Health), "Attacked")]
-    public static class MatiNPCDamageProtectionPatch
-    {
-        [HarmonyPrefix]
-        public static bool Prefix(Health __instance, float adj, HealthBase from)
-        {
-            if (__instance == null) return true;
-
-            if (MatiFixPlugin.IsNonAngryNPC(__instance))
-            {
-                if (from != null && IsMatiObject(from.gameObject))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        private static bool IsMatiObject(GameObject go)
-        {
-            if (go == null) return false;
-
-            BehaviourController c = go.GetComponent<BehaviourController>();
-            if (c != null)
-            {
-                return MatiFixPlugin.IsMati(c);
-            }
-
-            return false;
         }
     }
 
