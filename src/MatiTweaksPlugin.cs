@@ -8,7 +8,7 @@ using BlockStoryCore;
 
 namespace BlockStoryMod
 {
-    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "5.0.0")]
+    [BepInPlugin("com.malts.blockstory.matitweaks", "MatiTweaks", "5.1.0")]
     [BepInDependency(Core.Guid)]
     public class MatiFixPlugin : BaseUnityPlugin
     {
@@ -17,6 +17,7 @@ namespace BlockStoryMod
         public static bool WallSensing = PlayerPrefs.GetInt("MatiFix_WallSensing", 1) != 0;
         public static bool EnhancedRange = PlayerPrefs.GetInt("MatiFix_EnhancedRange", 1) != 0;
         public static bool PrioritizeHighHealth = PlayerPrefs.GetInt("MatiFix_PrioritizeHighHealth", 1) != 0;
+        public static bool NpcProtection = PlayerPrefs.GetInt("MatiFix_NpcProtection", 0) != 0;
         public static bool LingeringDarkDamage = PlayerPrefs.GetInt("MatiFix_LingeringDarkDamage", 1) != 0;
         public static bool TeleportDelay = PlayerPrefs.GetInt("MatiFix_TeleportDelay", 1) != 0;
 
@@ -213,7 +214,7 @@ namespace BlockStoryMod
                 if (PetList.IsPet(rootGo) || IsMati(rootGo.GetComponent<BehaviourController>())) continue;
 
                 Health h = health as Health;
-                if (h != null && IsNonAngryNPC(h)) continue;
+                if (h != null && NpcProtection && IsNonAngryNPC(h)) continue;
 
                 if (processed.Contains(rootGo)) continue;
                 processed.Add(rootGo);
@@ -335,7 +336,7 @@ namespace BlockStoryMod
             Health h = go.GetComponent<Health>();
             if (h == null || h.IsDead()) return false;
 
-            if (IsNonAngryNPC(h))
+            if (NpcProtection && IsNonAngryNPC(h))
             {
                 return false;
             }
@@ -534,17 +535,17 @@ namespace BlockStoryMod
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _dim);
 
             float width = Mathf.Min(580f, Screen.width * 0.85f);
-            float height = Mathf.Min(670f, Screen.height * 0.96f);
+            float height = Mathf.Min(700f, Screen.height * 0.98f);
             float x = (Screen.width - width) / 2f;
             float y = (Screen.height - height) / 2f;
 
             GUI.Box(new Rect(x, y, width, height), GUIContent.none, Theme.Window);
             GUI.Label(new Rect(x, y + 14f, width, 30f), "Mati Tweaks Settings", _title);
 
-            float contentY = y + 44f;
+            float contentY = y + 40f;
             float contentWidth = width - 48f;
-            float btnHeight = 28f;
-            float btnSpacing = 31f;
+            float btnHeight = 26f;
+            float btnSpacing = 29f;
 
             string hoveredDesc = "Hover over any option to see what it does.";
             Vector2 mousePos = Event.current.mousePosition;
@@ -633,12 +634,12 @@ namespace BlockStoryMod
             Rect r7 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r7.Contains(mousePos))
             {
-                hoveredDesc = "Adds overtime dark damage on enemies hit by Mati's attack.";
+                hoveredDesc = "Make Mati deal no damage to non-angry NPCs";
             }
-            if (DrawToggleButton(r7, "Dark Damage Overtime", MatiFixPlugin.LingeringDarkDamage))
+            if (DrawToggleButton(r7, "Enable NPC damage protection", MatiFixPlugin.NpcProtection))
             {
-                MatiFixPlugin.LingeringDarkDamage = !MatiFixPlugin.LingeringDarkDamage;
-                PlayerPrefs.SetInt("MatiFix_LingeringDarkDamage", MatiFixPlugin.LingeringDarkDamage ? 1 : 0);
+                MatiFixPlugin.NpcProtection = !MatiFixPlugin.NpcProtection;
+                PlayerPrefs.SetInt("MatiFix_NpcProtection", MatiFixPlugin.NpcProtection ? 1 : 0);
                 PlayerPrefs.Save();
             }
 
@@ -647,24 +648,38 @@ namespace BlockStoryMod
             Rect r8 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r8.Contains(mousePos))
             {
-                hoveredDesc = "Adjusts the damage dealt per second by the dark damage.";
+                hoveredDesc = "Adds overtime dark damage on enemies hit by Mati's attack.";
             }
-            MatiFixPlugin.DoTDamage = DrawSlider(r8, "Damage / sec", MatiFixPlugin.DoTDamage, 1f, 100f, " Damage", step: 1.0f, enabled: MatiFixPlugin.LingeringDarkDamage);
-            PlayerPrefs.SetFloat("MatiFix_DoTDamage", MatiFixPlugin.DoTDamage);
+            if (DrawToggleButton(r8, "Dark Damage Overtime", MatiFixPlugin.LingeringDarkDamage))
+            {
+                MatiFixPlugin.LingeringDarkDamage = !MatiFixPlugin.LingeringDarkDamage;
+                PlayerPrefs.SetInt("MatiFix_LingeringDarkDamage", MatiFixPlugin.LingeringDarkDamage ? 1 : 0);
+                PlayerPrefs.Save();
+            }
 
             contentY += btnSpacing;
 
             Rect r9 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
             if (r9.Contains(mousePos))
             {
+                hoveredDesc = "Adjusts the damage dealt per second by the dark damage.";
+            }
+            MatiFixPlugin.DoTDamage = DrawSlider(r9, "Damage / sec", MatiFixPlugin.DoTDamage, 1f, 100f, " Damage", step: 1.0f, enabled: MatiFixPlugin.LingeringDarkDamage);
+            PlayerPrefs.SetFloat("MatiFix_DoTDamage", MatiFixPlugin.DoTDamage);
+
+            contentY += btnSpacing;
+
+            Rect r10 = new Rect(x + 24f, contentY, contentWidth, btnHeight);
+            if (r10.Contains(mousePos))
+            {
                 hoveredDesc = "Adjusts how many seconds the dark damage lasts.";
             }
-            MatiFixPlugin.DoTDuration = DrawSlider(r9, "Duration", MatiFixPlugin.DoTDuration, 5f, 60f, "s", step: 0.5f, enabled: MatiFixPlugin.LingeringDarkDamage);
+            MatiFixPlugin.DoTDuration = DrawSlider(r10, "Duration", MatiFixPlugin.DoTDuration, 5f, 60f, "s", step: 0.5f, enabled: MatiFixPlugin.LingeringDarkDamage);
             PlayerPrefs.SetFloat("MatiFix_DoTDuration", MatiFixPlugin.DoTDuration);
 
             PlayerPrefs.Save();
 
-            float descY = y + 335f;
+            float descY = y + 340f;
             float descHeight = 160f;
             GUI.Label(new Rect(x + 24f, descY, contentWidth, descHeight), hoveredDesc, _desc);
 
